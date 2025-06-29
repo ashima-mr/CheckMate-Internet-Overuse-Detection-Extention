@@ -1,39 +1,32 @@
 {
   "manifest_version": 3,
-  "name": "CheckMate: Internet Overuse Detection",
+  "name": "CheckMate - Internet Overuse Detection",
   "version": "1.0.0",
-  "description": "Zero-cost ML-powered extension for real-time internet overuse detection with user feedback",
+  "description": "Real-time internet overuse detection using machine learning with user feedback and privacy controls",
   "permissions": [
-    "tabs",
     "storage",
+    "tabs",
+    "activeTab",
     "notifications",
     "idle",
-    "activeTab",
-    "browsingData"
+    "scripting"
   ],
-  "options_page": "src/popup/options.html",
+  "host_permissions": [
+    "<all_urls>"
+  ],
   "background": {
     "service_worker": "src/background/service-worker.js"
   },
-  "web_accessible_resources": [
-    {
-      "resources": ["stats/lib/chart.umd.min.js", "stats/stats.js"],
-      "matches": ["<all_urls>"]
-    }
-  ],
   "content_scripts": [
     {
-      "matches": [
-        "<all_urls>"
-      ],
-      "js": [
-        "src/content/content-script.js"
-      ],
-      "run_at": "document_end"
+      "matches": ["<all_urls>"],
+      "js": ["src/content/content-script.js"],
+      "run_at": "document_start"
     }
   ],
   "action": {
     "default_popup": "src/popup/popup.html",
+    "default_title": "CheckMate - Internet Overuse Detection",
     "default_icon": {
       "16": "assets/icons/icon16.png",
       "32": "assets/icons/icon32.png",
@@ -41,14 +34,21 @@
       "128": "assets/icons/icon128.png"
     }
   },
+  "options_page": "src/popup/options.html",
   "icons": {
     "16": "assets/icons/icon16.png",
     "32": "assets/icons/icon32.png",
     "48": "assets/icons/icon48.png",
     "128": "assets/icons/icon128.png"
   },
-  "minimum_chrome_version": "102",
-  "content_security_policy": {
-    "extension_pages": "script-src 'self'; object-src 'self'"
-  }
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "src/popup/break-timer.html",
+        "src/popup/stats.html",
+        "assets/*"
+      ],
+      "matches": ["<all_urls>"]
+    }
+  ]
 }

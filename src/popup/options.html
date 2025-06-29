@@ -1,51 +1,208 @@
 <!DOCTYPE html>
-<html>
-  <head>
-    <meta charset="utf-8">
-    <title>Site Categories</title>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CheckMate - Website Categories</title>
+    <link rel="stylesheet" href="popup.css">
     <style>
-      body {
-        font-family: sans-serif;
-        margin: 1em;
-      }
-      table {
-        border-collapse: collapse;
-        width: 100%;
-        margin-top: 1em;
-      }
-      th, td {
-        border: 1px solid #ccc;
-        padding: .5em;
-      }
-      input, select {
-        padding: .2em;
-      }
-      button {
-        margin-left: .5em;
-      }
+        body {
+            width: auto;
+            min-height: auto;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        
+        .options-container {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(20px);
+            border-radius: 20px;
+            padding: 30px;
+            margin: 20px 0;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+        }
+        
+        .add-website-form {
+            background: #f8fafc;
+            border-radius: 16px;
+            padding: 25px;
+            margin-bottom: 30px;
+            border: 1px solid #e2e8f0;
+        }
+        
+        .category-options {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .category-option {
+            padding: 15px;
+            border: 2px solid #e2e8f0;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background: white;
+        }
+        
+        .category-option.selected {
+            border-color: #4299e1;
+            background: #ebf8ff;
+        }
+        
+        .websites-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+        }
+        
+        .websites-table th {
+            background: #f8fafc;
+            padding: 15px;
+            text-align: left;
+            font-weight: 600;
+            color: #2d3748;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        
+        .websites-table td {
+            padding: 15px;
+            border-bottom: 1px solid #f1f5f9;
+        }
+        
+        .category-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        
+        .category-productive {
+            background: #d4f6db;
+            color: #22543d;
+        }
+        
+        .category-unproductive {
+            background: #fed7d7;
+            color: #9c4221;
+        }
+        
+        .category-unhealthy {
+            background: #fbb6ce;
+            color: #97266d;
+        }
     </style>
-  </head>
-  <body>
-    <h1>Configure Site Categories</h1>
-    <label for="host">Host (e.g. example.com):</label>
-    <input id="host" placeholder="hostname" size="30">
-    <label for="category">Category:</label>
-    <select id="category">
-      <option value="productive">Productive</option>
-      <option value="unproductive">Unproductive</option>
-      <option value="unhealthy">Unhealthy</option>
-    </select>
-    <button id="add">Add Rule</button>
-    <table>
-      <thead>
-        <tr>
-          <th>Host</th>
-          <th>Category</th>
-          <th>Action</th>
-        </tr>
-      </thead>
-      <tbody id="list"></tbody>
-    </table>
+</head>
+<body>
+    <div class="options-container">
+        <div class="page-header">
+            <h1 class="page-title">Website Categories</h1>
+            <p class="page-subtitle">Manage how CheckMate categorizes different websites for better detection accuracy</p>
+        </div>
+
+        <!-- Add Website Form -->
+        <div class="add-website-form">
+            <h3 style="margin-bottom: 20px; color: #2d3748;">Add New Website</h3>
+            
+            <div id="messageContainer"></div>
+            
+            <div class="form-group">
+                <label class="form-label" for="hostInput">Website (e.g., example.com)</label>
+                <input type="text" id="hostInput" class="form-input" 
+                       placeholder="Enter domain name without www or https://" 
+                       autocomplete="off">
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Category</label>
+                <div class="category-options">
+                    <div class="category-option" data-category="productive">
+                        <div class="category-icon">✅</div>
+                        <div class="category-name">Productive</div>
+                        <div class="category-desc">Work, learning, beneficial activities</div>
+                    </div>
+                    <div class="category-option" data-category="unproductive">
+                        <div class="category-icon">😐</div>
+                        <div class="category-name">Unproductive</div>
+                        <div class="category-desc">Entertainment, social media, neutral browsing</div>
+                    </div>
+                    <div class="category-option selected" data-category="unhealthy">
+                        <div class="category-icon">⚠️</div>
+                        <div class="category-name">Unhealthy</div>
+                        <div class="category-desc">Excessive, addictive, or harmful usage</div>
+                    </div>
+                </div>
+                <input type="hidden" id="selectedCategory" value="unhealthy">
+            </div>
+
+            <button id="addBtn" class="btn btn-primary" style="width: 100%;">
+                Add Website
+            </button>
+        </div>
+
+        <!-- Filter Tabs -->
+        <div class="filter-tabs">
+            <button class="tab-btn active" data-filter="all">All</button>
+            <button class="tab-btn" data-filter="productive">Productive</button>
+            <button class="tab-btn" data-filter="unproductive">Unproductive</button>
+            <button class="tab-btn" data-filter="unhealthy">Unhealthy</button>
+        </div>
+
+        <!-- Websites Table -->
+        <div id="websiteTableContainer">
+            <table class="websites-table">
+                <thead>
+                    <tr>
+                        <th>Website</th>
+                        <th>Category</th>
+                        <th>Added</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="websiteList">
+                    <!-- Dynamic content will be inserted here -->
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Empty State -->
+        <div id="emptyState" class="empty-state" style="display: none;">
+            <div class="empty-state-icon">🌐</div>
+            <div class="empty-state-text">No websites categorized yet</div>
+            <div class="empty-state-subtext">Add websites above to help CheckMate learn your usage patterns</div>
+        </div>
+
+        <!-- Bulk Actions -->
+        <div class="bulk-actions">
+            <button id="exportBtn" class="btn btn-secondary">
+                📤 Export Categories
+            </button>
+            <button id="importBtn" class="btn btn-secondary">
+                📥 Import Categories
+            </button>
+            <input type="file" id="importFile" class="file-input" accept=".json">
+            <button id="clearAllBtn" class="btn btn-danger">
+                🗑️ Clear All Categories
+            </button>
+        </div>
+
+        <!-- Back to Extension -->
+        <div style="text-align: center; margin-top: 30px;">
+            <button id="backBtn" class="btn btn-primary">
+                ← Back to CheckMate
+            </button>
+        </div>
+    </div>
+
     <script src="options.js"></script>
-  </body>
+</body>
 </html>

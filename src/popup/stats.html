@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>CheckMate - Detailed Statistics</title>
+    <script src="lib/chart.umd.min.js"></script>
+    <script src="stats.js"></script>
+    <link rel="stylesheet" href="stats.css">
+</head>
+<body>
+    <div class="dashboard-container">
+        <!-- Header -->
+        <header class="dashboard-header">
+            <h1>CheckMate Analytics Dashboard</h1>
+            <div class="header-controls">
+                <select id="timeRangeSelect">
+                    <option value="24h">Last 24 Hours</option>
+                    <option value="7d">Last 7 Days</option>
+                    <option value="30d">Last 30 Days</option>
+                </select>
+                <button id="exportDashboard" class="btn btn-secondary">Export Report</button>
+            </div>
+        </header>
+
+        <!-- Summary KPIs -->
+        <section class="kpi-section">
+            <div class="kpi-grid">
+                <div class="kpi-card">
+                    <h3>Total Sessions</h3>
+                    <div class="kpi-value" id="totalSessions">--</div>
+                    <div class="kpi-change positive" id="sessionsChange">+0%</div>
+                </div>
+                <div class="kpi-card">
+                    <h3>Total Predictions</h3>
+                    <div class="kpi-value" id="totalPredictions">--</div>
+                    <div class="kpi-change" id="predictionsChange">+0%</div>
+                </div>
+                <div class="kpi-card">
+                    <h3>Health Score</h3>
+                    <div class="kpi-value" id="overallHealthScore">--</div>
+                    <div class="kpi-change" id="healthChange">+0%</div>
+                </div>
+                <div class="kpi-card">
+                    <h3>Average Confidence</h3>
+                    <div class="kpi-value" id="avgConfidence">--</div>
+                    <div class="kpi-change" id="confidenceChange">+0%</div>
+                </div>
+                <div class="kpi-card">
+                    <h3>User Feedback</h3>
+                    <div class="kpi-value" id="feedbackCount">--</div>
+                    <div class="kpi-change" id="feedbackChange">+0%</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Charts Section -->
+        <section class="charts-section">
+            <div class="chart-grid">
+                <!-- Usage Classification Over Time -->
+                <div class="chart-container">
+                    <h3>Usage Classification Over Time</h3>
+                    <canvas id="classificationChart"></canvas>
+                </div>
+
+                <!-- Confidence Levels -->
+                <div class="chart-container">
+                    <h3>AI Assessment Confidence</h3>
+                    <canvas id="confidenceChart"></canvas>
+                </div>
+
+                <!-- Activity Patterns -->
+                <div class="chart-container">
+                    <h3>Daily Activity Patterns</h3>
+                    <canvas id="activityChart"></canvas>
+                </div>
+
+                <!-- Category Distribution -->
+                <div class="chart-container">
+                    <h3>Website Category Distribution</h3>
+                    <canvas id="categoryChart"></canvas>
+                </div>
+            </div>
+        </section>
+
+        <!-- Data Tables -->
+        <section class="tables-section">
+            <!-- Recent Predictions -->
+            <div class="table-container">
+                <h3>Recent Predictions</h3>
+                <div class="table-controls">
+                    <input type="text" id="searchPredictions" placeholder="Search predictions...">
+                    <select id="filterClass">
+                        <option value="all">All Classes</option>
+                        <option value="0">Productive</option>
+                        <option value="1">Unproductive</option>
+                        <option value="2">Unhealthy</option>
+                    </select>
+                </div>
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Time</th>
+                            <th>Classification</th>
+                            <th>Confidence</th>
+                            <th>Pattern Score</th>
+                            <th>Feedback</th>
+                        </tr>
+                    </thead>
+                    <tbody id="predictionsTableBody">
+                        <!-- Populated by JavaScript -->
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Feedback History -->
+            <div class="table-container">
+                <h3>User Feedback History</h3>
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Time</th>
+                            <th>Action</th>
+                            <th>Original Prediction</th>
+                            <th>User Classification</th>
+                            <th>Impact</th>
+                        </tr>
+                    </thead>
+                    <tbody id="feedbackTableBody">
+                        <!-- Populated by JavaScript -->
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- Model Performance -->
+        <section class="performance-section">
+            <h3>Model Performance Metrics</h3>
+            <div class="performance-grid">
+                <div class="metric-card">
+                    <h4>Tree Depth</h4>
+                    <div class="metric-value" id="treeDepth">--</div>
+                </div>
+                <div class="metric-card">
+                    <h4>Leaf Nodes</h4>
+                    <div class="metric-value" id="leafCount">--</div>
+                </div>
+                <div class="metric-card">
+                    <h4>Drift Events</h4>
+                    <div class="metric-value" id="driftCount">--</div>
+                </div>
+                <div class="metric-card">
+                    <h4>Feedback Accuracy</h4>
+                    <div class="metric-value" id="feedbackAccuracy">--</div>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <script src="lib/chart.umd.min.js"></script>
+    <script src="stats.js"></script>
+</body>
+</html>

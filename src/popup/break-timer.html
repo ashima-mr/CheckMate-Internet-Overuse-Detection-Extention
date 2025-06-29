@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>CheckMate - Take a Break</title>
+    <link rel="stylesheet" href="break-timer.css">
+</head>
+<body>
+    <div class="break-container">
+        <!-- Background Animation -->
+        <div class="background-animation">
+            <div class="floating-circle circle-1"></div>
+            <div class="floating-circle circle-2"></div>
+            <div class="floating-circle circle-3"></div>
+            <div class="floating-circle circle-4"></div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="break-content">
+            <header class="break-header">
+                <h1 class="break-title">Time for a Break</h1>
+                <p class="break-subtitle">Take a moment to rest and recharge</p>
+            </header>
+
+            <!-- Timer Display -->
+            <div class="timer-section">
+                <div class="timer-circle">
+                    <svg class="timer-svg" viewBox="0 0 200 200">
+                        <circle
+                            class="timer-track"
+                            cx="100"
+                            cy="100"
+                            r="90"
+                            fill="none"
+                            stroke="#e2e8f0"
+                            stroke-width="8"
+                        />
+                        <circle
+                            class="timer-progress"
+                            cx="100"
+                            cy="100"
+                            r="90"
+                            fill="none"
+                            stroke="#4299e1"
+                            stroke-width="8"
+                            stroke-linecap="round"
+                            id="progressCircle"
+                        />
+                    </svg>
+                    <div class="timer-text">
+                        <span class="timer-minutes" id="timerMinutes">05</span>
+                        <span class="timer-colon">:</span>
+                        <span class="timer-seconds" id="timerSeconds">00</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Break Activities -->
+            <div class="activities-section">
+                <h3>Suggested Activities</h3>
+                <div class="activity-grid">
+                    <div class="activity-card" data-activity="breathe">
+                        <div class="activity-icon">🌬️</div>
+                        <h4>Deep Breathing</h4>
+                        <p>4-7-8 breathing exercise</p>
+                    </div>
+                    <div class="activity-card" data-activity="stretch">
+                        <div class="activity-icon">🤸</div>
+                        <h4>Gentle Stretch</h4>
+                        <p>Neck and shoulder relief</p>
+                    </div>
+                    <div class="activity-card" data-activity="eyes">
+                        <div class="activity-icon">👁️</div>
+                        <h4>Eye Rest</h4>
+                        <p>20-20-20 rule exercise</p>
+                    </div>
+                    <div class="activity-card" data-activity="walk">
+                        <div class="activity-icon">🚶</div>
+                        <h4>Short Walk</h4>
+                        <p>Move around your space</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Timer Controls -->
+            <div class="controls-section">
+                <div class="preset-times">
+                    <button class="time-btn" data-minutes="5">5 min</button>
+                    <button class="time-btn active" data-minutes="10">10 min</button>
+                    <button class="time-btn" data-minutes="15">15 min</button>
+                    <button class="time-btn" data-minutes="20">20 min</button>
+                </div>
+                
+                <div class="main-controls">
+                    <button class="control-btn start-btn" id="startBtn">
+                        <span class="btn-icon">▶️</span>
+                        Start Break
+                    </button>
+                    <button class="control-btn pause-btn" id="pauseBtn" style="display: none;">
+                        <span class="btn-icon">⏸️</span>
+                        Pause
+                    </button>
+                    <button class="control-btn reset-btn" id="resetBtn">
+                        <span class="btn-icon">🔄</span>
+                        Reset
+                    </button>
+                </div>
+            </div>
+
+            <!-- Motivational Messages -->
+            <div class="motivation-section">
+                <div class="motivation-text" id="motivationText">
+                    Taking regular breaks improves focus and creativity
+                </div>
+            </div>
+        </div>
+
+        <!-- Activity Guides (Hidden by default) -->
+        <div class="activity-guide breathing-guide" id="breathingGuide" style="display: none;">
+            <h3>4-7-8 Breathing Exercise</h3>
+            <div class="breathing-animation">
+                <div class="breath-circle"></div>
+                <div class="breath-text" id="breathText">Breathe In</div>
+            </div>
+            <div class="breath-instructions">
+                <p>1. Inhale through nose for 4 counts</p>
+                <p>2. Hold breath for 7 counts</p>
+                <p>3. Exhale through mouth for 8 counts</p>
+            </div>
+            <button class="guide-close" onclick="closeActivityGuide()">✕</button>
+        </div>
+    </div>
+
+    <script src="break-timer.js"></script>
+</body>
+</html>

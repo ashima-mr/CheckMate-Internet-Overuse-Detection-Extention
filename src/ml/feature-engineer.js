@@ -5,10 +5,9 @@
 
 class FeatureEngineer {
     constructor(options = {}) {
-        this.windowSizes = options.windowSizes || [900000, 3600000, 14400000]; // 15min, 1h, 4h
-        this.shortWindow = new CircularBuffer(60); // 15 minutes
-        this.mediumWindow = new CircularBuffer(240); // 1 hour
-        this.longWindow = new CircularBuffer(960); // 4 hours
+        this.primaryWindow = new CircularBuffer(120);    // 30-min window (15s intervals)
+        this.baselineWindow = new CircularBuffer(480);   // 2-hour window
+        this.shortWindow = new CircularBuffer(60);        // 15-min window
         
         this.currentSession = {
             startTime: Date.now(),
@@ -226,12 +225,15 @@ class FeatureEngineer {
             sessionDuration: event.timestamp - this.currentSession.startTime,
             tabSwitches: this.currentSession.tabSwitches,
             focusTime: this.currentSession.focusTime,
-            domains: this.currentSession.domains.size
+            domains: this.currentSession.domains.size,
+            scrollEvents: this.currentSession.scrollEvents,
+            clickEvents: this.currentSession.clickEvents,
+            keystrokeEvents: this.currentSession.keystrokeEvents
         };
 
+        this.primaryWindow.push(dataPoint);    // New window names
+        this.baselineWindow.push(dataPoint);
         this.shortWindow.push(dataPoint);
-        this.mediumWindow.push(dataPoint);
-        this.longWindow.push(dataPoint);
     }
 
     /**
@@ -247,12 +249,15 @@ class FeatureEngineer {
         const timeScore = this.calculateTimeContextScore(hourOfDay, dayOfWeek);
 
         // Session-based features
-        const sessionDurationHours = sessionDuration / (1000 * 60 * 60);
-        const tabSwitchVelocity = this.currentSession.tabSwitches / Math.max(sessionDurationHours, 0.25);
+        // Update session metrics (NEW)
+        const sessionDurationMinutes = sessionDuration / (1000 * 60);
+        const tabSwitchVelocity = this.currentSession.tabSwitches / Math.max(sessionDurationMinutes, 0.5);
         const focusRatio = this.currentSession.focusTime / Math.max(sessionDuration, 1);
 
         // Activity features
-        const activityIntensity = this.calculateActivityIntensity();
+        const primaryWindowStats = this.calculateWindowStats(this.primaryWindow);
+        const baselineWindowStats = this.calculateWindowStats(this.baselineWindow);
+        const activityIntensity = this.calculateActivityIntensity(primaryWindowStats);
         const engagementScore = this.calculateEngagementScore();
 
         // Content and behavioral features
@@ -276,6 +281,21 @@ class FeatureEngineer {
     }
 
     /**
+     * Calculate statistics for a given window
+     */
+    calculateWindowStats(window) {
+    const events = window.toArray();
+    const stats = {
+        eventCount: events.length,
+        interactionSum: events.reduce((sum, e) => sum + (e.scrollEvents + e.clickEvents + e.keystrokeEvents), 0),
+        startTime: events[0]?.timestamp || 0,
+        endTime: events[events.length-1]?.timestamp || 0
+    };
+    stats.duration = stats.endTime - stats.startTime;
+    return stats;
+    }
+
+    /**
      * Calculate time context score based on typical usage patterns
      */
     calculateTimeContextScore(hour, dayOfWeek) {
@@ -296,18 +316,11 @@ class FeatureEngineer {
     /**
      * Calculate activity intensity based on user interactions
      */
-    calculateActivityIntensity() {
-        const recentActivity = this.shortWindow.toArray().slice(-10);
-        if (recentActivity.length === 0) return 0;
-
-        const totalInteractions = this.currentSession.scrollEvents + 
-                                 this.currentSession.clickEvents + 
-                                 this.currentSession.keystrokeEvents;
-        
-        const timeSpan = Math.max(Date.now() - this.currentSession.startTime, 1000 * 60); // At least 1 minute
-        const interactionsPerMinute = totalInteractions / (timeSpan / (1000 * 60));
-        
-        return Math.min(interactionsPerMinute / 100, 1.0); // Normalize to 0-1
+    // NEW: Uses window-specific stats
+    calculateActivityIntensity(windowStats) {
+    if (windowStats.duration === 0) return 0;
+    const interactionsPerMinute = windowStats.interactionSum / (windowStats.duration / (1000 * 60));
+    return Math.min(interactionsPerMinute / 100, 1.0);
     }
 
     /**
@@ -384,8 +397,8 @@ class FeatureEngineer {
     }
 
     // Normalization functions
-    normalizeSessionDuration(hours) {
-        return Math.min(Math.tanh(hours / 4), 1.0); // Sigmoid-like normalization
+    normalizeSessionDuration(minutes) {
+        return Math.min(Math.tanh(minutes / 240), 1.0);  // 240 mins = 4 hours // Sigmoid-like normalization
     }
 
     normalizeTabSwitchVelocity(velocity) {
@@ -439,9 +452,9 @@ class FeatureEngineer {
         };
         
         this.eventHistory = [];
+        this.primaryWindow = new CircularBuffer(120);
+        this.baselineWindow = new CircularBuffer(480);
         this.shortWindow = new CircularBuffer(60);
-        this.mediumWindow = new CircularBuffer(240);
-        this.longWindow = new CircularBuffer(960);
     }
 
     /**
