@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>CheckMate Detailed Stats</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body { font-family: sans-serif; padding: 20px; max-width: 800px; margin: auto; }
+    h1 { text-align: center; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: center; }
+    th { background: #f4f4f4; }
+    #chartContainer { width: 100%; height: 300px; }
+  </style>
+  <!-- Load Chart.js UMD build -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="stats.js"></script>
+</head>
+<body>
+  <h1>Detailed Usage Stats</h1>
+
+  <section id="predictionsSection">
+    <h2>Recent Predictions</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Time</th>
+          <th>Overuse?</th>
+          <th>Confidence</th>
+        </tr>
+      </thead>
+      <tbody id="predictionsTableBody">
+        <!-- Filled by stats.js -->
+      </tbody>
+    </table>
+  </section>
+
+  <section id="chartSection">
+    <h2>Overuse Confidence Over Time</h2>
+    <canvas id="confidenceChart"></canvas>
+  </section>
+
+  <script src="lib/chart.min.js"></script>
+  <script src="stats.js"></script>
+</body>

@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CheckMate - Internet Overuse Detection</title>
+    <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <div class="logo">
+                <img src="../assets/icons/icon32.png" alt="CheckMate" class="logo-icon">
+                <h1 class="title">CheckMate</h1>
+            </div>
+            <div class="status-indicator" id="statusIndicator">
+                <span class="status-dot"></span>
+                <span class="status-text">Active</span>
+            </div>
+        </div>
+
+        <!-- Current Status -->
+        <div class="status-section">
+            <h2>Current Session</h2>
+            <div class="session-stats">
+                <div class="stat-item">
+                    <span class="stat-label">Duration</span>
+                    <span class="stat-value" id="sessionDuration">--</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Websites</span>
+                    <span class="stat-value" id="websiteCount">--</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Activity</span>
+                    <span class="stat-value" id="activityLevel">--</span>
+                </div>
+            </div>
+            
+            <div class="usage-indicator">
+                <label class="usage-label" id="usageLabel">Healthy Usage</label>
+                <div class="usage-bar">
+                    <div class="usage-fill" id="usageFill"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ML Insights -->
+        <div class="insights-section">
+            <h2>AI Analysis</h2>
+            <div class="insight-grid">
+                <div class="insight-item">
+                    <span class="insight-label">Pattern Score</span>
+                    <span class="insight-value" id="patternScore">--</span>
+                </div>
+                <div class="insight-item">
+                    <span class="insight-label">Confidence</span>
+                    <span class="insight-value" id="confidenceScore">--</span>
+                </div>
+            </div>
+            
+            <!-- Feedback Section -->
+            <div class="feedback-section" id="feedbackSection" style="display: none;">
+                <div class="feedback-question">
+                    <p>Is this assessment correct?</p>
+                    <div class="feedback-buttons">
+                        <button class="btn btn-feedback btn-correct" id="feedbackCorrect">✓ Correct</button>
+                        <button class="btn btn-feedback btn-incorrect" id="feedbackIncorrect">✗ Incorrect</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Controls -->
+        <div class="controls-section">
+            <div class="setting-item">
+                <label class="switch">
+                    <input type="checkbox" id="enableMonitoring" checked>
+                    <span class="slider"></span>
+                </label>
+                <span class="setting-label">Enable Monitoring</span>
+            </div>
+
+            <div class="setting-item">
+                <label class="switch">
+                    <input type="checkbox" id="enableNotifications" checked>
+                    <span class="slider"></span>
+                </label>
+                <span class="setting-label">Enable Notifications</span>
+            </div>
+
+            <div class="sensitivity-control">
+                <label class="setting-label">Sensitivity</label>
+                <input type="range" class="sensitivity-slider" id="sensitivitySlider" 
+                       min="0.1" max="1.0" step="0.1" value="0.5">
+                <div class="sensitivity-labels">
+                    <span>Low</span>
+                    <span>High</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="actions-section">
+            <button class="btn btn-primary" id="viewStatsBtn">
+                📊 View Detailed Stats
+            </button>
+            
+            <div class="action-row">
+                <button class="btn btn-secondary" id="pauseBtn">⏸️ Pause</button>
+                <button class="btn btn-secondary" id="takeBreakBtn">☕ Take Break</button>
+            </div>
+
+            <div class="privacy-controls">
+                <button class="btn btn-danger" id="deleteDataBtn">🗑️ Delete All Data</button>
+                <button class="btn btn-secondary" id="downloadDataBtn">💾 Download All Data</button>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="footer">
+            <span class="last-update">Last update: <span id="lastUpdate">--</span></span>
+        </div>
+    </div>
+
+    <script src="popup.js"></script>
+</body>
+</html>

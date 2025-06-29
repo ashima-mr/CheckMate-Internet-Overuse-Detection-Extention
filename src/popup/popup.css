@@ -1,0 +1,473 @@
+/* Modern Popup Design - popup.css */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html {
+    width: 380px;   /* desired popup width (max 800px) */
+    height: 600px;  /* desired popup height (max 600px) */
+}
+
+body {
+    width: 380px;
+    min-height: 600px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: #333;
+    font-size: 14px;
+}
+
+.container {
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    min-height: 600px;
+}
+
+/* Header */
+.header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px;
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.logo-icon {
+    width: 28px;
+    height: 28px;
+}
+
+.title {
+    font-size: 20px;
+    font-weight: 700;
+    color: #2d3748;
+    margin: 0;
+}
+
+.status-indicator {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #48bb78;
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+.status-text {
+    font-size: 12px;
+    color: #4a5568;
+    font-weight: 500;
+}
+
+/* Main Content */
+.status-section, .insights-section, .controls-section, .actions-section {
+    background: rgba(255, 255, 255, 0.95);
+    margin: 1px 0;
+    padding: 20px;
+    backdrop-filter: blur(10px);
+}
+
+.status-section h2, .insights-section h2 {
+    font-size: 16px;
+    font-weight: 600;
+    color: #2d3748;
+    margin-bottom: 16px;
+}
+
+/* Session Stats */
+.session-stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 20px;
+}
+
+.stat-item {
+    text-align: center;
+    padding: 12px 8px;
+    background: #f8fafc;
+    border-radius: 12px;
+    border: 1px solid #e2e8f0;
+}
+
+.stat-label {
+    display: block;
+    font-size: 11px;
+    color: #718096;
+    margin-bottom: 4px;
+    font-weight: 500;
+}
+
+.stat-value {
+    display: block;
+    font-size: 18px;
+    font-weight: 700;
+    color: #2d3748;
+}
+
+/* Usage Indicator */
+.usage-indicator {
+    margin-top: 16px;
+}
+
+.usage-label {
+    display: block;
+    font-size: 14px;
+    font-weight: 600;
+    color: #4a5568;
+    margin-bottom: 8px;
+}
+
+.usage-bar {
+    width: 100%;
+    height: 8px;
+    background: #e2e8f0;
+    border-radius: 6px;
+    overflow: hidden;
+    position: relative;
+}
+
+.usage-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #48bb78, #ed8936, #e53e3e);
+    border-radius: 6px;
+    transition: width 0.3s ease;
+    width: 0%;
+}
+
+/* Insights */
+.insight-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 16px;
+}
+
+.insight-item {
+    text-align: center;
+    padding: 16px 12px;
+    background: linear-gradient(135deg, #f8fafc, #edf2f7);
+    border-radius: 12px;
+    border: 1px solid #e2e8f0;
+}
+
+.insight-label {
+    display: block;
+    font-size: 12px;
+    color: #718096;
+    margin-bottom: 6px;
+    font-weight: 500;
+}
+
+.insight-value {
+    display: block;
+    font-size: 20px;
+    font-weight: 700;
+    color: #2d3748;
+}
+
+/* Feedback Section */
+.feedback-section {
+    margin-top: 16px;
+    padding: 16px;
+    background: #fff3cd;
+    border-radius: 12px;
+    border: 1px solid #ffeaa7;
+}
+
+.feedback-question p {
+    font-size: 14px;
+    color: #856404;
+    margin-bottom: 12px;
+    font-weight: 500;
+}
+
+.feedback-buttons {
+    display: flex;
+    gap: 8px;
+}
+
+.btn-feedback {
+    flex: 1;
+    padding: 8px 12px;
+    font-size: 12px;
+    border-radius: 8px;
+    border: none;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-correct {
+    background: #d4edda;
+    color: #155724;
+}
+
+.btn-correct:hover {
+    background: #c3e6cb;
+}
+
+.btn-incorrect {
+    background: #f8d7da;
+    color: #721c24;
+}
+
+.btn-incorrect:hover {
+    background: #f5c6cb;
+}
+
+/* Controls */
+.setting-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+}
+
+.setting-label {
+    font-size: 14px;
+    color: #4a5568;
+    font-weight: 500;
+}
+
+/* Toggle Switch */
+.switch {
+    position: relative;
+    display: inline-block;
+    width: 48px;
+    height: 24px;
+}
+
+.switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #cbd5e0;
+    transition: 0.3s;
+    border-radius: 24px;
+}
+
+.slider:before {
+    position: absolute;
+    content: "";
+    height: 18px;
+    width: 18px;
+    left: 3px;
+    bottom: 3px;
+    background-color: white;
+    transition: 0.3s;
+    border-radius: 50%;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+input:checked + .slider {
+    background-color: #4299e1;
+}
+
+input:checked + .slider:before {
+    transform: translateX(24px);
+}
+
+/* Sensitivity Control */
+.sensitivity-control {
+    margin-bottom: 16px;
+}
+
+.sensitivity-slider {
+    width: 100%;
+    height: 6px;
+    border-radius: 3px;
+    background: #e2e8f0;
+    outline: none;
+    margin: 10px 0;
+    -webkit-appearance: none;
+}
+
+.sensitivity-slider::-webkit-slider-thumb {
+    appearance: none;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: #4299e1;
+    cursor: pointer;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+}
+
+.sensitivity-labels {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    color: #718096;
+}
+
+/* Buttons */
+.btn {
+    padding: 12px 16px;
+    border: none;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    text-decoration: none;
+}
+
+.btn-primary {
+    background: linear-gradient(135deg, #4299e1, #3182ce);
+    color: white;
+    box-shadow: 0 4px 12px rgba(66, 153, 225, 0.3);
+}
+
+.btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(66, 153, 225, 0.4);
+}
+
+.btn-secondary {
+    background: #edf2f7;
+    color: #4a5568;
+    border: 1px solid #e2e8f0;
+}
+
+.btn-secondary:hover {
+    background: #e2e8f0;
+    transform: translateY(-1px);
+}
+
+.btn-danger {
+    background: #fed7d7;
+    color: #c53030;
+    border: 1px solid #feb2b2;
+    font-size: 12px;
+    padding: 8px 12px;
+}
+
+.btn-danger:hover {
+    background: #feb2b2;
+}
+
+/* Action Sections */
+.actions-section {
+    padding: 20px;
+}
+
+.action-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin: 12px 0;
+}
+
+.privacy-controls {
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid #e2e8f0;
+}
+
+#downloadDataBtn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    padding: 12px 16px;
+    margin-top: 12px;
+    background: #edf2f7;
+    color: #4a5568;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: background 0.2s ease, transform 0.2s ease;
+}
+
+#downloadDataBtn:hover {
+    background: #e2e8f0;
+    transform: translateY(-1px);
+}
+Related
+How can I style the new button to match .btn-secondary in popup.css
+
+
+/* Footer */
+.footer {
+    background: rgba(255, 255, 255, 0.8);
+    padding: 12px 20px;
+    text-align: center;
+    margin-top: auto;
+}
+
+.last-update {
+    font-size: 11px;
+    color: #718096;
+}
+
+/* Responsive adjustments */
+@media (max-width: 400px) {
+    body {
+        width: 100%;
+    }
+    
+    .session-stats {
+        grid-template-columns: 1fr 1fr;
+    }
+    
+    .insight-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Animation classes */
+.fade-in {
+    animation: fadeIn 0.3s ease-in;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.pulse {
+    animation: pulse 1s infinite;
+}
+
+/* Status specific styles */
+.status-paused .status-dot {
+    background: #ed8936;
+}
+
+.status-error .status-dot {
+    background: #e53e3e;
+}

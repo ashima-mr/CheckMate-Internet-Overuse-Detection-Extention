@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Site Categories</title>
+    <style>
+      body {
+        font-family: sans-serif;
+        margin: 1em;
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        margin-top: 1em;
+      }
+      th, td {
+        border: 1px solid #ccc;
+        padding: .5em;
+      }
+      input, select {
+        padding: .2em;
+      }
+      button {
+        margin-left: .5em;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Configure Site Categories</h1>
+    <label for="host">Host (e.g. example.com):</label>
+    <input id="host" placeholder="hostname" size="30">
+    <label for="category">Category:</label>
+    <select id="category">
+      <option value="productive">Productive</option>
+      <option value="unproductive">Unproductive</option>
+      <option value="unhealthy">Unhealthy</option>
+    </select>
+    <button id="add">Add Rule</button>
+    <table>
+      <thead>
+        <tr>
+          <th>Host</th>
+          <th>Category</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody id="list"></tbody>
+    </table>
+    <script src="options.js"></script>
+  </body>
+</html>
