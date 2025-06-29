@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CheckMate - Internet Overuse Detection</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://unpkg.com/dagre-d3@0.6.4/dist/dagre-d3.min.js"></script>
     <link rel="stylesheet" href="popup.css">
 </head>
 <body>
@@ -18,7 +20,117 @@
                 <div class="status-dot"></div>
                 <span class="status-text">Active</span>
             </div>
+            <div id="drift-status" class="status-item">
+                    <span class="status-dot"></span>
+                    <span>No Drift</span>
+                </div>
         </header>
+
+        <!-- Navigation Tabs -->
+        <nav class="tab-navigation">
+            <button class="tab-btn active" data-tab="overview">Overview</button>
+            <button class="tab-btn" data-tab="tree">Tree View</button>
+            <button class="tab-btn" data-tab="performance">Performance</button>
+            <button class="tab-btn" data-tab="settings">Settings</button>
+        </nav>
+
+        <!-- Overview Tab -->
+        <div id="overview-tab" class="tab-content active">
+            <div class="metrics-grid">
+                <div class="metric-card">
+                    <h3>Instances Processed</h3>
+                    <div id="instances-count" class="metric-value">0</div>
+                </div>
+                <div class="metric-card">
+                    <h3>Current Accuracy</h3>
+                    <div id="accuracy-value" class="metric-value">0%</div>
+                </div>
+                <div class="metric-card">
+                    <h3>Tree Depth</h3>
+                    <div id="tree-depth" class="metric-value">0</div>
+                </div>
+                <div class="metric-card">
+                    <h3>Drift Events</h3>
+                    <div id="drift-count" class="metric-value">0</div>
+                </div>
+            </div>
+
+            <!-- Real-time Performance Chart -->
+            <div class="chart-section">
+                <h3>Real-time Performance</h3>
+                <div id="performance-chart"></div>
+            </div>
+
+            <!-- Recent Predictions -->
+            <div class="predictions-section">
+                <h3>Recent Predictions</h3>
+                <div id="predictions-list"></div>
+            </div>
+        </div>
+
+        <!-- Tree Visualization Tab -->
+        <div id="tree-tab" class="tab-content">
+            <div class="tree-controls">
+                <button id="refresh-tree">Refresh Tree</button>
+                <button id="export-tree">Export JSON</button>
+                <label>
+                    Layout:
+                    <select id="tree-layout">
+                        <option value="tree">Tree</option>
+                        <option value="cluster">Cluster</option>
+                        <option value="radial">Radial</option>
+                    </select>
+                </label>
+            </div>
+            <div id="tree-visualization"></div>
+        </div>
+
+        <!-- Performance Analytics Tab -->
+        <div id="performance-tab" class="tab-content">
+            <div class="analytics-grid">
+                <div class="chart-container">
+                    <h3>Accuracy Over Time</h3>
+                    <div id="accuracy-chart"></div>
+                </div>
+                <div class="chart-container">
+                    <h3>Drift Detection Events</h3>
+                    <div id="drift-chart"></div>
+                </div>
+                <div class="chart-container">
+                    <h3>Class Distribution</h3>
+                    <div id="class-distribution-chart"></div>
+                </div>
+                <div class="chart-container">
+                    <h3>Feature Importance</h3>
+                    <div id="feature-importance-chart"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Settings Tab -->
+        <div id="settings-tab" class="tab-content">
+            <div class="settings-form">
+                <h3>Model Configuration</h3>
+                <div class="form-group">
+                    <label for="sensitivity">Sensitivity:</label>
+                    <input type="range" id="sensitivity" min="0.01" max="1" step="0.01" value="0.05">
+                    <span id="sensitivity-value">0.05</span>
+                </div>
+                <div class="form-group">
+                    <label for="grace-period">Grace Period:</label>
+                    <input type="number" id="grace-period" min="50" max="500" value="200">
+                </div>
+                <div class="form-group">
+                    <label for="drift-method">Drift Detection:</label>
+                    <select id="drift-method">
+                        <option value="SPC">Statistical Process Control</option>
+                        <option value="ADWIN">ADWIN</option>
+                    </select>
+                </div>
+                <button id="reset-model" class="action-btn warning">Reset Model</button>
+                <button id="export-data" class="action-btn">Export Data</button>
+            </div>
+        </div>
 
         <!-- Status Section -->
         <section class="status-section">
