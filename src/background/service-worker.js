@@ -327,6 +327,33 @@ class OveruseDetectionService {
         }
     }
 
+    async updateSettings(newSettings) {
+        try {
+            // Merge new settings into current configuration
+            this.settings = { ...this.settings, ...newSettings };
+            // Persist to storage
+            await chrome.storage.local.set(this.settings);
+            // Apply runtime changes
+            if ('enabled' in newSettings) {
+                if (newSettings.enabled && this.isPaused) {
+                    this.resumeTracking();
+                } else if (!newSettings.enabled && !this.isPaused) {
+                    this.pauseTracking();
+                }
+            }
+            if ('sensitivity' in newSettings && this.hoeffdingTree) {
+                this.hoeffdingTree.hoeffdingBound = newSettings.sensitivity;
+            }
+            if ('notificationsEnabled' in newSettings) {
+                // No special runtime action needed
+            }
+            console.log('Settings updated successfully');
+        } catch (err) {
+            console.error('Failed to update settings', err);
+            throw err;
+        }
+    }
+
     /**
      * Privacy controls - pause tracking
      */

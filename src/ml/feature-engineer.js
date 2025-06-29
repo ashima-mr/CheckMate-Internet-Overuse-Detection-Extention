@@ -236,8 +236,8 @@ class FeatureEngineer {
     extractFeatures() {
         const now = Date.now();
         const sessionDuration = now - this.currentSession.startTime;
-        const sessionDurationHours = sessionDurationMs / (1000 * 60 * 60);
-        const sessionDurationMinutes = sessionDurationMs / (1000 * 60);
+        const sessionDurationHours = sessionDuration / (1000 * 60 * 60);
+        const sessionDurationMinutes = sessionDuration / (1000 * 60);
 
         // Temporal features
         const hourOfDay = new Date().getHours();
@@ -253,8 +253,8 @@ class FeatureEngineer {
         const baselineWindowStats = this.calculateWindowStats(this.baselineWindow);
         const shortStats = this.calculateWindowStats(this.shortWindow);
 
-        shortIntensity = this.calculateActivityIntensity(shortStats);
-        mediumIntensity = this.calculateActivityIntensity(primaryWindowStats);
+        const shortIntensity = this.calculateActivityIntensity(shortStats);
+        const mediumIntensity = this.calculateActivityIntensity(primaryWindowStats);
         const activityIntensity = 0.7 * shortIntensity + 0.3 * mediumIntensity;
         const engagementScore = this.calculateEngagementScore();
 
