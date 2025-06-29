@@ -24,6 +24,21 @@
       "run_at": "document_start"
     }
   ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "src/utils/circular-buffer.js",
+        "src/ml/adwin.js",
+        "src/ml/hoeffding-tree.js",
+        "src/ml/feature-engineer.js",
+        "src/ml/spc.js",
+        "src/popup/break-timer.html",
+        "src/popup/stats.html",
+        "assets/*"
+      ],
+      "matches": ["<all_urls>"]
+    }
+  ],
   "action": {
     "default_popup": "src/popup/popup.html",
     "default_title": "CheckMate - Internet Overuse Detection",
@@ -40,15 +55,5 @@
     "32": "assets/icons/icon32.png",
     "48": "assets/icons/icon48.png",
     "128": "assets/icons/icon128.png"
-  },
-  "web_accessible_resources": [
-    {
-      "resources": [
-        "src/popup/break-timer.html",
-        "src/popup/stats.html",
-        "assets/*"
-      ],
-      "matches": ["<all_urls>"]
-    }
-  ]
+  }
 }

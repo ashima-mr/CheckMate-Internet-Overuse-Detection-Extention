@@ -164,6 +164,7 @@ class FeatureEngineer {
             
             if (event.data.isVisible) {
                 this.currentSession.focusTime += (event.timestamp - this.currentSession.lastActivityTime);
+                this.currentSession.lastActivityTime = event.timestamp;
             }
         }
     }
@@ -192,7 +193,7 @@ class FeatureEngineer {
     extractDomain(url) {
         try {
             return new URL(url).hostname;
-        } catch (error) {
+        } catch {
             return 'unknown';
         }
     }
@@ -201,18 +202,11 @@ class FeatureEngineer {
      * Update category statistics for a domain
      */
     updateCategoryStats(domain) {
-        const category = this.getCategoryForDomain(domain);
+        const category = this.websiteCategories[domain];
         if (category) {
             const currentCount = this.currentSession.websiteCategories.get(category) || 0;
             this.currentSession.websiteCategories.set(category, currentCount + 1);
         }
-    }
-
-    /**
-     * Get user-defined category for a domain
-     */
-    getCategoryForDomain(domain) {
-        return this.websiteCategories[domain] || null;
     }
 
     /**
@@ -242,6 +236,8 @@ class FeatureEngineer {
     extractFeatures() {
         const now = Date.now();
         const sessionDuration = now - this.currentSession.startTime;
+        const sessionDurationHours = sessionDurationMs / (1000 * 60 * 60);
+        const sessionDurationMinutes = sessionDurationMs / (1000 * 60);
 
         // Temporal features
         const hourOfDay = new Date().getHours();
@@ -249,15 +245,17 @@ class FeatureEngineer {
         const timeScore = this.calculateTimeContextScore(hourOfDay, dayOfWeek);
 
         // Session-based features
-        // Update session metrics (NEW)
-        const sessionDurationMinutes = sessionDuration / (1000 * 60);
         const tabSwitchVelocity = this.currentSession.tabSwitches / Math.max(sessionDurationMinutes, 0.5);
-        const focusRatio = this.currentSession.focusTime / Math.max(sessionDuration, 1);
+        const focusRatio = this.currentSession.focusTime / Math.max(sessionDurationMinutes, 1);
 
         // Activity features
         const primaryWindowStats = this.calculateWindowStats(this.primaryWindow);
         const baselineWindowStats = this.calculateWindowStats(this.baselineWindow);
-        const activityIntensity = this.calculateActivityIntensity(primaryWindowStats);
+        const shortStats = this.calculateWindowStats(this.shortWindow);
+
+        shortIntensity = this.calculateActivityIntensity(shortStats);
+        mediumIntensity = this.calculateActivityIntensity(primaryWindowStats);
+        const activityIntensity = 0.7 * shortIntensity + 0.3 * mediumIntensity;
         const engagementScore = this.calculateEngagementScore();
 
         // Content and behavioral features
@@ -340,34 +338,31 @@ class FeatureEngineer {
      */
     calculateCategoryScore() {
         if (this.currentSession.websiteCategories.size === 0) {
-            return 0.5; // Neutral if no categories defined
+            return 0.5; // Neutral baseline
         }
+
+        const categoryWeights = {
+            addictive: 1.0,
+            distracting: 0.9,
+            entertainment: 0.7,
+            news: 0.6,
+            shopping: 0.6,
+            communication: 0.5,
+            neutral: 0.5,
+            tools: 0.4,
+            learning: 0.3,
+            work: 0.2,
+            productive: 0.2,
+            research: 0.1
+        };
 
         let score = 0;
         let totalCount = 0;
 
         for (const [category, count] of this.currentSession.websiteCategories) {
+            const weight = categoryWeights[category.toLowerCase()] ?? 0.5;
+            score += count * weight;
             totalCount += count;
-            
-            // Users can define their own scoring through categories
-            switch (category.toLowerCase()) {
-                case 'unhealthy':
-                case 'distracting':
-                case 'addictive':
-                    score += count * 1.0;
-                    break;
-                case 'neutral':
-                case 'entertainment':
-                    score += count * 0.6;
-                    break;
-                case 'productive':
-                case 'work':
-                case 'educational':
-                    score += count * 0.2;
-                    break;
-                default:
-                    score += count * 0.5; // Unknown category
-            }
         }
 
         return totalCount > 0 ? score / totalCount : 0.5;

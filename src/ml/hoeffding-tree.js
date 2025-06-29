@@ -4,18 +4,35 @@
  * Supports user feedback integration and concept drift detection
  */
 
-class HoeffdingTree3Class {
+class HoeffdingTree {
   constructor(options = {}) {
     this.gracePeriod = options.gracePeriod || 200;
     this.hoeffdingBound = options.hoeffdingBound || 0.05;
-    this.driftDetectionMethod = options.driftDetectionMethod || 'ADWIN';
-    this.root = new HoeffdingNode3Class();
-    this.numClasses = 3; // Productive, Unproductive, Unhealthy
-    this.classLabels = ['Productive', 'Unproductive', 'Unhealthy'];
+    this.root = new HoeffdingNode();
+    this.numClasses = 3;
+    this.classLabels = ['productive', 'non-productive', 'overuse'];
     this.featureCount = 0;
     this.instancesSeen = 0;
-    this.driftDetector = new ADWIN();
-    this.warningDetector = new ADWIN();
+
+    // Choose drift detector type
+    this.driftDetectionMethod = options.driftDetectionMethod || 'SPC';
+
+    if (this.driftDetectionMethod === 'SPC') {
+      // e.g. StatisticalProcessControl(windowSize, sigmaThreshold)
+      this.driftDetector    = new StatisticalProcessControl(
+                                options.spcWindowSize || 100,
+                                options.spcSigmaThreshold || 3
+                              );
+      this.warningDetector  = new StatisticalProcessControl(
+                                options.spcWindowSize || 100,
+                                options.spcSigmaThreshold || 3
+                              );
+    } else {
+      // Default to ADWIN
+      this.driftDetector    = new ADWIN(options.adwinDelta || 0.002);
+      this.warningDetector  = new ADWIN(options.adwinDelta || 0.002);
+    }
+
     this.userFeedbackBuffer = [];
     this.feedbackWeight = 2.0;
     this.adaptationRate = 0.1;
@@ -30,11 +47,11 @@ class HoeffdingTree3Class {
    */
   predict(features) {
     if (!features || features.length === 0) {
-      return { 
-        prediction: 0, 
-        confidence: 0.33, 
+      return {
+        prediction: 0,
+        confidence: 0.33,
         classDistribution: [0.33, 0.33, 0.34],
-        classLabel: 'Productive'
+        classLabel: this.classLabels[0]
       };
     }
 
@@ -45,6 +62,7 @@ class HoeffdingTree3Class {
     let maxVotes = 0;
     let totalVotes = 0;
 
+    // Tally votes across all classes
     for (let i = 0; i < this.numClasses; i++) {
       const votes = classDistribution[i] || 0;
       totalVotes += votes;
@@ -54,11 +72,10 @@ class HoeffdingTree3Class {
       }
     }
 
+    // Compute confidence and normalized probabilities
     const confidence = totalVotes > 0 ? maxVotes / totalVotes : 0.33;
-
-    // Normalize class distribution to probabilities
-    const probabilities = totalVotes > 0 
-      ? classDistribution.map(votes => votes / totalVotes)
+    const probabilities = totalVotes > 0
+      ? classDistribution.map(v => v / totalVotes)
       : [0.33, 0.33, 0.34];
 
     return {
@@ -147,7 +164,7 @@ class HoeffdingTree3Class {
    */
   processSessionFeedback(sessionLabel, reasoning = '') {
     const feedback = {
-      sessionLabel: sessionLabel, // 'productive', 'unproductive', 'unhealthy'
+      sessionLabel: sessionLabel, // 'productive', 'non-productive', 'overuse'
       classValue: this.sessionLabelToClass(sessionLabel),
       timestamp: Date.now(),
       reasoning: reasoning,
@@ -176,8 +193,8 @@ class HoeffdingTree3Class {
   sessionLabelToClass(sessionLabel) {
     const labelMap = {
       'productive': 0,
-      'unproductive': 1, 
-      'unhealthy': 2
+      'non-productive': 1, 
+      'overuse': 2
     };
     return labelMap[sessionLabel.toLowerCase()] || 1;
   }
@@ -249,8 +266,8 @@ class HoeffdingTree3Class {
     if (bestSplit) {
       leafNode.splitFeature = bestSplit.feature;
       leafNode.splitValue = bestSplit.value;
-      leafNode.leftChild = new HoeffdingNode3Class();
-      leafNode.rightChild = new HoeffdingNode3Class();
+      leafNode.leftChild = new HoeffdingNode();
+      leafNode.rightChild = new HoeffdingNode();
       leafNode.redistributeInstances();
     }
   }
@@ -260,7 +277,7 @@ class HoeffdingTree3Class {
    */
   handleConceptDrift() {
     console.log('Concept drift detected, adapting tree...');
-    this.root = new HoeffdingNode3Class();
+    this.root = new HoeffdingNode();
     this.retrainWithFeedback();
     this.driftDetector.reset();
     this.warningDetector.reset();
@@ -352,7 +369,7 @@ class HoeffdingTree3Class {
    * Reset the entire tree
    */
   reset() {
-    this.root = new HoeffdingNode3Class();
+    this.root = new HoeffdingNode();
     this.instancesSeen = 0;
     this.userFeedbackBuffer = [];
     this.pendingFeedbackRequests = [];
@@ -364,7 +381,7 @@ class HoeffdingTree3Class {
 /**
  * Enhanced Node class for 3-class Hoeffding Tree
  */
-class HoeffdingNode3Class {
+class HoeffdingNode {
   constructor() {
     this.classStats = new Array(3).fill(0); // 3-class classification
     this.featureStats = new Map();
@@ -513,5 +530,5 @@ class HoeffdingNode3Class {
 
 // Export for use in other files
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { HoeffdingTree3Class, HoeffdingNode3Class };
+  module.exports = { HoeffdingTree, HoeffdingNode};
 }

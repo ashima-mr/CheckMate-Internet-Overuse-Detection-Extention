@@ -6,65 +6,71 @@
 // Import required modules using proper importScripts for Manifest V3
 importScripts(
     '../utils/circular-buffer.js',
+    '../ml/adwin.js',
     '../ml/hoeffding-tree.js',
     '../ml/feature-engineer.js',
     '../ml/spc.js'
 );
 
 class OveruseDetectionService {
-    constructor() {
+    constructor(settings) {
         this.isInitialized = false;
-        this.featureEngineer = null;
-        this.hoeffdingTree = null;
-        this.spcModel = null;
+        this.settings = settings;
+
+        this.featureEngineer = new FeatureEngineer();
+        this.hoeffdingTree  = new HoeffdingTree({
+            gracePeriod: 200,
+            hoeffdingBound: this.settings.sensitivity ?? 0.5,
+            driftDetectionMethod: 'ADWIN'
+        });
+        this.spcModel = new StatisticalProcessControl(100, 3);
+
+        this.userFeedbackQueue = [];
+        this.predictionHistory = [];
+
         this.lastNotificationTime = 0;
         this.notificationCooldown = 30 * 60 * 1000; // 30 minutes
         this.monitoringInterval = null;
         this.isPaused = false;
-        
-        this.settings = {
-            enabled: true,
-            sensitivity: 0.5,
-            notificationsEnabled: true,
-            monitoringInterval: 15000,
-            privacyMode: false,
-            dataRetentionDays: 30
-        };
-        
-        this.userFeedbackQueue = [];
-        this.predictionHistory = [];
-        
-        this.initialize();
     }
 
-    /**
-     * Initialize the service with error handling
-     */
+    static async create() {
+        const settings = await OveruseDetectionService.loadSettingsFromStorage();
+        const service = new OveruseDetectionService(settings);
+        await service.initialize();  // Sets up listeners, starts monitoring
+        return service;
+    }
+
+    static async loadSettingsFromStorage() {
+        return new Promise((resolve) => {
+            chrome.storage.local.get([
+                'enabled',
+                'sensitivity',
+                'notificationsEnabled',
+                'monitoringInterval',
+                'privacyMode',
+                'dataRetentionDays'
+            ], (result) => {
+                resolve({
+                    enabled: result.enabled ?? true,
+                    sensitivity: result.sensitivity ?? 0.5,
+                    notificationsEnabled: result.notificationsEnabled ?? true,
+                    monitoringInterval: result.monitoringInterval ?? 15000,
+                    privacyMode: result.privacyMode ?? false,
+                    dataRetentionDays: result.dataRetentionDays ?? 30
+                });
+            });
+        });
+    }
+
     async initialize() {
         try {
-            // Load settings from storage
-            await this.loadSettings();
-            
-            // Initialize ML components with proper error handling
-            this.featureEngineer = new FeatureEngineer();
-            this.hoeffdingTree = new Hoeffdingtree({
-                gracePeriod: 200,
-                hoeffdingBound: this.settings.sensitivity,
-                driftDetectionMethod: 'ADWIN'
-            });
-            this.spcModel = new StatisticalProcessControl(100, 3);
-            
-            // Set up event listeners
             this.setupEventListeners();
-            
-            // Start monitoring if enabled
             if (this.settings.enabled && !this.isPaused) {
                 this.startMonitoring();
             }
-            
             this.isInitialized = true;
             console.log('✅ Overuse Detection Service initialized successfully');
-            
         } catch (error) {
             console.error('❌ Service initialization failed:', error);
             this.isInitialized = false;
@@ -284,44 +290,40 @@ class OveruseDetectionService {
         }
     }
 
-    /**
-     * Process user feedback for model improvement
-     */
+    /** Process feedback for model update */
     async processFeedback(feedback) {
         try {
-            // Get the most recent prediction to correct
-            const recentPredictions = await this.getRecentPredictions();
-            const targetPrediction = recentPredictions.find(p => 
-                Math.abs(p.timestamp - feedback.timestamp) < 60000 // Within 1 minute
-            );
-            
-            if (targetPrediction) {
-                // Update Hoeffding Tree with corrected label
-                const correctedClass = feedback.isCorrect ? targetPrediction.prediction : 
-                                     (1 - targetPrediction.prediction);
-                
-                const updateResult = this.hoeffdingTree.update(
-                    targetPrediction.features,
-                    correctedClass,
-                    {
-                        correctClass: correctedClass,
-                        confidence: feedback.confidence || 1.0,
-                        reasoning: feedback.reasoning
-                    }
-                );
-                
-                // Log feedback for analysis
-                await this.logUserFeedback({
-                    ...feedback,
-                    predictionId: targetPrediction.timestamp,
-                    modelResponse: updateResult
-                });
-                
-                console.log('User feedback processed:', updateResult);
+            const recent = await this.getRecentPredictions();
+            const target = recent.find(p => Math.abs(p.timestamp - feedback.timestamp) < 60000);
+            if (!target) return;
+
+            const classMap = ['productive', 'non-productive', 'overuse'];
+            const corrected = classMap.indexOf(feedback.trueClass);
+            if (corrected === -1) {
+            console.warn('⚠️ Invalid class label in feedback:', feedback.trueClass);
+            return;
             }
-            
-        } catch (error) {
-            console.error('Feedback processing error:', error);
+
+            const updateResult = this.hoeffdingTree.update(
+            target.features,
+            corrected,
+            {
+                correctedClass: corrected,
+                confidence: feedback.confidence || 1.0,
+                reasoning: feedback.reasoning || 'User-provided label'
+            }
+            );
+
+            await this.logUserFeedback({
+            ...feedback,
+            predictionId: target.timestamp,
+            modelResponse: updateResult
+            });
+
+            console.log('✅ User feedback processed:', updateResult);
+
+        } catch (e) {
+            console.error('❌ Feedback processing error:', e);
         }
     }
 
@@ -518,7 +520,7 @@ class OveruseDetectionService {
                 title: 'Internet Overuse Detected',
                 message: `Unhealthy usage pattern detected (confidence: ${Math.round(prediction.confidence * 100)}%). Consider taking a break.`,
                 buttons: [
-                    { title: 'Correct (Not Overuse)' },
+                    { title: 'Not Overuse' },
                     { title: 'Confirm & Take Break' }
                 ]
             };
@@ -540,23 +542,34 @@ class OveruseDetectionService {
     }
 
     async handleNotificationFeedback(buttonIndex, prediction) {
+        const isOveruse = buttonIndex === 1;
+
+        // Assign trueClass with distribution for non-overuse feedback
+        const trueClass = isOveruse
+            ? 'overuse'
+            : Math.random() < 0.5
+            ? 'productive'
+            : 'non-productive';
+
         const feedback = {
-            timestamp: Date.now(),
-            isCorrect: buttonIndex === 1, // Button 1 = "Confirm & Take Break"
+            timestamp: prediction.timestamp || Date.now(), // Prefer prediction time, fallback to now
+            trueClass,
             confidence: 1.0,
-            reasoning: buttonIndex === 0 ? 'User indicated not overuse' : 'User confirmed overuse'
+            reasoning: isOveruse
+            ? 'User confirmed overuse'
+            : 'User indicated not overuse',
+            isCorrect: isOveruse // Optional, only if you want to keep it
         };
-        
+
         await this.processFeedback(feedback);
-        
-        if (buttonIndex === 1) {
-            // Open break timer
+
+        if (isOveruse) {
             chrome.tabs.create({
-                url: chrome.runtime.getURL('src/popup/break-timer.html'),
-                active: true
+            url: chrome.runtime.getURL('src/popup/break-timer.html'),
+            active: true
             });
         }
-    }
+        }
 
     async logUserFeedback(feedback) {
         try {
@@ -585,13 +598,13 @@ class OveruseDetectionService {
         await chrome.storage.local.set({ sessionData });
     }
 }
+OveruseDetectionService.create().then(service => {
+    // Optionally store service in a global variable if needed
+    // Set up any additional event listeners or keep-alive logic here
 
-// Initialize the service
-const overuseDetectionService = new OveruseDetectionService();
+    chrome.runtime.onConnect.addListener((port) => {
+        // Keep service worker alive logic here
+    });
 
-// Keep service worker alive
-chrome.runtime.onConnect.addListener((port) => {
-    // This helps prevent the service worker from being terminated
+    console.log('🚀 Internet Overuse Detection Service Worker loaded');
 });
-
-console.log('🚀 Internet Overuse Detection Service Worker loaded');

@@ -81,7 +81,7 @@ body {
 }
 
 /* Main Content */
-.status-section, .insights-section, .controls-section, .actions-section {
+.status-section, .insights-section, .feedback-section, .controls-section, .actions-section {
     background: rgba(255, 255, 255, 0.95);
     margin: 1px 0;
     padding: 20px;
@@ -156,6 +156,19 @@ body {
     width: 0%;
 }
 
+.usage-scale {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 8px;
+}
+
+.usage-scale span {
+    flex: 1;
+    text-align: center;
+    font-size: 12px;
+    color: #4a5568;
+}
+
 /* Insights */
 .insight-grid {
     display: grid;
@@ -187,25 +200,17 @@ body {
     color: #2d3748;
 }
 
-/* Feedback Section */
-.feedback-section {
-    margin-top: 16px;
-    padding: 16px;
-    background: #fff3cd;
-    border-radius: 12px;
-    border: 1px solid #ffeaa7;
-}
-
 .feedback-question p {
     font-size: 14px;
-    color: #856404;
+    color: #4a5568; /* similar to your usage-label */
     margin-bottom: 12px;
-    font-weight: 500;
+    font-weight: 600;
 }
 
 .feedback-buttons {
     display: flex;
-    gap: 8px;
+    gap: 12px;
+    margin-top: 8px;
 }
 
 .btn-feedback {
@@ -217,24 +222,34 @@ body {
     font-weight: 600;
     cursor: pointer;
     transition: all 0.2s ease;
+    color: #2d3748; /* dark gray text */
 }
 
-.btn-correct {
-    background: #d4edda;
-    color: #155724;
+.btn-productive {
+    background: #48bb78; /* green */
+    color: white;
 }
 
-.btn-correct:hover {
-    background: #c3e6cb;
+.btn-productive:hover {
+    background: #38a169;
 }
 
-.btn-incorrect {
-    background: #f8d7da;
-    color: #721c24;
+.btn-nonproductive {
+    background: #fff3cd; /* light neutral background */
+    color: #856404;
 }
 
-.btn-incorrect:hover {
-    background: #f5c6cb;
+.btn-nonproductive:hover {
+    background: #ffe8a1; /* slightly darker on hover */
+}
+
+.btn-overuse {
+    background: #e53e3e; /* red */
+    color: white;
+}
+
+.btn-overuse:hover {
+    background: #c53030;
 }
 
 /* Controls */
@@ -417,9 +432,27 @@ input:checked + .slider:before {
     background: #e2e8f0;
     transform: translateY(-1px);
 }
-Related
-How can I style the new button to match .btn-secondary in popup.css
 
+#deleteDataBtn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    padding: 12px 16px;           /* match Download button */
+    margin-top: 12px;
+    background: #fed7d7;          /* red background from btn-danger */
+    color: #c53030;               /* red text */
+    border: 1px solid #feb2b2;   /* red border */
+    border-radius: 10px;          /* rounded corners */
+    cursor: pointer;
+    font-size: 14px;              /* match download button font size */
+    transition: background 0.2s ease, transform 0.2s ease;
+}
+
+#deleteDataBtn:hover {
+    background: #feb2b2;          /* lighter red on hover */
+    transform: translateY(-1px); /* subtle lift on hover */
+}
 
 /* Footer */
 .footer {

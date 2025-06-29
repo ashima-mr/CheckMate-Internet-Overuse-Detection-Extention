@@ -14,7 +14,7 @@
                 <div class="logo-icon">🔍</div>
                 <h1 class="title">CheckMate</h1>
             </div>
-            <div class="status-indicator">
+            <div id="statusIndicator" class="status-indicator">
                 <div class="status-dot"></div>
                 <span class="status-text">Active</span>
             </div>
@@ -40,7 +40,7 @@
 
             <!-- Usage Health Indicator -->
             <div class="usage-indicator">
-                <span class="usage-label" id="usageLabel">Real-time Usage Health Indicator</span>
+                <span class="usage-label" id="usageLabel">Recent Usage Health Indicator</span>
                 <div class="usage-bar">
                     <div class="usage-fill" id="usageFill"></div>
                 </div>
@@ -52,12 +52,25 @@
             </div>
         </section>
 
+        <!-- Session Feedback Section -->
+        <section id="sessionFeedbackSection" class="feedback-section">
+            <h2>Session Feedback</h2>
+            <div class="feedback-question">
+                <p>How would you classify your current session?</p>
+            </div>
+            <div class="feedback-buttons">
+                <button id="feedbackProductive" class="btn-feedback btn-productive">✅ Productive</button>
+                <button id="feedbackNonproductive" class="btn-feedback btn-nonproductive">😐 Non-Productive</button>
+                <button id="feedbackOveruse" class="btn-feedback btn-overuse">⚠️ Overuse</button>
+            </div>
+        </section>
+
         <!-- ML Insights Section -->
         <section class="insights-section">
             <h2>AI Analysis</h2>
             <div class="insight-grid">
                 <div class="insight-item">
-                    <span class="insight-label">Activity matches typical overuse patterns by</span>
+                    <span class="insight-label">Activity Pattern Alignment with Typical Overuse</span>
                     <span class="insight-value" id="patternScore">--</span>
                 </div>
                 <div class="insight-item">
@@ -65,24 +78,12 @@
                     <span class="insight-value" id="confidenceScore">--</span>
                 </div>
             </div>
-
-            <!-- Session Feedback Section (hidden by default) -->
-            <div id="sessionFeedbackSection" class="feedback-section" style="display: none;">
-                <div class="feedback-question">
-                    <p>How would you classify your current session?</p>
-                </div>
-                <div class="feedback-buttons">
-                    <button id="feedbackProductive" class="btn-feedback btn-correct">✅ Productive</button>
-                    <button id="feedbackUnproductive" class="btn-feedback">😐 Unproductive</button>
-                    <button id="feedbackUnhealthy" class="btn-feedback btn-incorrect">⚠️ Unhealthy</button>
-                </div>
-            </div>
         </section>
 
         <!-- Controls Section -->
         <section class="controls-section">
             <div class="setting-item">
-                <span class="setting-label">Enable Monitoring</span>
+                <span class="setting-label">Enable Extention</span>
                 <label class="switch">
                     <input type="checkbox" id="enableMonitoring" checked>
                     <span class="slider"></span>
@@ -115,7 +116,7 @@
                     📊 View Detailed Stats
                 </button>
                 <button id="manageWebsitesBtn" class="btn btn-secondary">
-                    🔗 Manage Websites
+                    🔗 Manage Website Lists
                 </button>
             </div>
 
@@ -147,7 +148,7 @@
         </footer>
     </div>
 
-    <script src="feedback-manager.js"></script>
+    <script type="module" src="feedback-manager.js"></script>
     <script src="popup.js"></script>
 </body>
 </html>
