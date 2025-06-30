@@ -9,6 +9,11 @@ class PopupController {
         this.updateInterval = null;
         this.currentPrediction = null;
         this.isPaused = false;
+
+        this.dashboard = new window.DashboardInterface();
+        this.dashboard.cacheDOM();
+        this.dashboard.bindEvents();
+
         this.init();
     }
 
@@ -205,7 +210,7 @@ class PopupController {
     }
 
     setUsageIndicator(fillRatio, label) {
-        // FIXED: Added null checks
+        console.log('Updating usage indicator:', fillRatio, label);
         const usageFill = document.getElementById('usageFill');
         const usageLabel = document.getElementById('usageLabel');
         
