@@ -19,8 +19,7 @@
                     <span class="status-dot active"></span>
                     <span class="status-text">Active</span>
                 </div>
-            </div>
-        </div>
+        </header>
 
         <!-- Main Content -->
         <div class="main-content">
@@ -55,49 +54,44 @@
                     </div>
                 </div>
             </div>
-
-            <!-- AI Insights (Simplified) -->
-            <div class="insights-section">
-                <h2>AI Assessment</h2>
-                <div class="insight-grid">
-                    <div class="insight-item">
-                        <span class="insight-label">Pattern Alignment</span>
-                        <span id="patternScore" class="insight-value">--</span>
-                    </div>
-                    <div class="insight-item">
-                        <span class="insight-label">AI Confidence</span>
-                        <span id="confidenceScore" class="insight-value">--</span>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Recent Prediction Display -->
-            <div id="recentPrediction" class="prediction-display">
-                <h3>Latest Classification</h3>
-                <div id="predictionDetails" class="prediction-content"></div>
-            </div>
-
-            <div id="feedbackSection" class="feedback-section">
+            <!-- Session Feedback Section -->
+            <section id="sessionFeedbackSection" class="feedback-section">
+                <h2>Session Feedback</h2>
                 <div class="feedback-question">
                     <p>How would you classify your current session?</p>
-                    <div class="feedback-buttons">
-                        <button id="feedbackProductive" class="btn-feedback btn-productive">✅ Productive</button>
-                        <button id="feedbackNonproductive" class="btn-feedback btn-nonproductive">😐 Non-Productive</button>
-                        <button id="feedbackOveruse" class="btn-feedback btn-overuse">⚠️ Overuse</button>
+                </div>
+                <div class="feedback-buttons">
+                    <button id="feedbackProductive" class="btn-feedback btn-productive">✅ Productive</button>
+                    <button id="feedbackNonproductive" class="btn-feedback btn-nonproductive">😐 Non-Productive</button>
+                    <button id="feedbackOveruse" class="btn-feedback btn-overuse">⚠️ Overuse</button>
+                </div>
+            </section>
+
+            <!-- ML Insights Section -->
+            <section class="insights-section">
+                <h2>AI Analysis</h2>
+                <div class="insight-grid">
+                    <div class="insight-item">
+                        <span class="insight-label">Activity Pattern Alignment with Typical Overuse</span>
+                        <span class="insight-value" id="patternScore">--</span>
+                    </div>
+                    <div class="insight-item">
+                        <span class="insight-label">AI Assessment Confidence</span>
+                        <span class="insight-value" id="confidenceScore">--</span>
                     </div>
                 </div>
-            </div>
+            </section>
 
-            <!-- Controls -->
-            <div class="controls-section">
+            <!-- Controls Section -->
+            <section class="controls-section">
                 <div class="setting-item">
-                    <span class="setting-label">Enable Monitoring</span>
+                    <span class="setting-label">Enable Extension</span>
                     <label class="switch">
                         <input type="checkbox" id="enableMonitoring" checked>
                         <span class="slider"></span>
                     </label>
                 </div>
-                
+
                 <div class="setting-item">
                     <span class="setting-label">Enable Notifications</span>
                     <label class="switch">
@@ -108,40 +102,42 @@
 
                 <div class="sensitivity-control">
                     <span class="setting-label">Detection Sensitivity</span>
-                    <input type="range" id="sensitivitySlider" class="sensitivity-slider" 
-                           min="0.01" max="0.1" step="0.01" value="0.05">
+                    <input type="range" id="sensitivitySlider" class="sensitivity-slider" min="0.1" max="1.0" step="0.1" value="0.5">
                     <div class="sensitivity-labels">
                         <span>Low</span>
                         <span>High</span>
                     </div>
                 </div>
-            </div>
+            </section>
 
-            <!-- Action Buttons -->
-            <div class="actions-section">
+            <!-- Actions Section -->
+            <section class="actions-section">
                 <div class="action-row">
                     <button id="viewStatsBtn" class="btn btn-primary">📊 View Detailed Stats</button>
-                    <button id="manageWebsitesBtn" class="btn btn-secondary">🔗 Manage Categories</button>
+                    <button id="manageWebsitesBtn" class="btn btn-secondary">🔗 Manage Website Lists</button>
                 </div>
+
                 <div class="action-row">
                     <button id="pauseBtn" class="btn btn-secondary">⏸️ Pause</button>
                     <button id="takeBreakBtn" class="btn btn-primary">☕ Take Break</button>
                 </div>
-                
+
                 <!-- Privacy Controls -->
                 <div class="privacy-controls">
                     <button id="downloadDataBtn" class="btn btn-secondary">💾 Download Data</button>
                     <button id="deleteDataBtn" class="btn btn-danger">🗑️ Delete All Data</button>
                 </div>
-            </div>
-        </div>
+            </section>
 
-        <!-- Footer -->
-        <div class="footer">
-            <span class="last-update">Last updated: <span id="lastUpdate">--</span></span>
-        </div>
-    </div>
-
+            <!-- Footer -->
+            <footer class="footer">
+                <div class="last-update">
+                    Last update: <span id="lastUpdate">--</span>
+                </div>
+            </footer>
+    
+    <script src="lib/chart.umd.min.js"></script>    
+    <script type="module" src="feedback-manager.js"></script>
     <script src="popup.js"></script>
 </body>
 </html>

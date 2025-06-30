@@ -460,7 +460,7 @@ class StatsController {
         const importanceData = featureNames.map(() => Math.random() * 100);
 
         this.charts.featureImportance = new Chart(ctx, {
-            type: 'horizontalBar',
+            type: 'bar',
             data: {
                 labels: featureNames,
                 datasets: [{
