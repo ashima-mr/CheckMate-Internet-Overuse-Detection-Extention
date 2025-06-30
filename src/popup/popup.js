@@ -1,6 +1,6 @@
 /**
- * Enhanced Popup Controller with user feedback and privacy controls
- * Fixed version with proper error handling and missing methods
+ * Enhanced Popup Controller with comprehensive UI responsiveness metrics
+ * MODIFIED: Added UI performance tracking and research metrics collection
  */
 
 class PopupController {
@@ -9,16 +9,60 @@ class PopupController {
         this.updateInterval = null;
         this.currentPrediction = null;
         this.isPaused = false;
-        
+
+        // ADDED: UI responsiveness and performance metrics
+        this.uiMetrics = {
+            // UI responsiveness tracking
+            responsiveness: {
+                renderTimes: [],
+                updateTimes: [],
+                interactionLatencies: []
+            },
+            
+            // User interaction tracking
+            userInteractions: {
+                buttonClicks: {},
+                settingsChanges: {},
+                feedbackSubmissions: []
+            },
+            
+            // Display update metrics
+            displayUpdates: {
+                statsUpdates: 0,
+                mlInsightUpdates: 0,
+                usageLevelUpdates: 0,
+                statusUpdates: 0,
+                averageUpdateTime: 0
+            },
+            
+            // Performance tracking
+            performance: {
+                initializationTime: 0,
+                averageRenderTime: 0,
+                memoryUsage: [],
+                domUpdates: []
+            }
+        };
+
         this.init();
     }
 
+    /**
+     * Enhanced initialization with performance tracking
+     * MODIFIED: Added comprehensive initialization metrics
+     */
     async init() {
+        const initStartTime = performance.now();
+        
         try {
             this.setupEventListeners();
             await this.loadCurrentSettings();
             this.startPeriodicUpdates();
             this.isInitialized = true;
+            
+            // ADDED: Record initialization time
+            this.uiMetrics.performance.initializationTime = performance.now() - initStartTime;
+            
             console.log('Popup controller initialized');
         } catch (error) {
             console.error('Popup initialization error:', error);
@@ -26,44 +70,73 @@ class PopupController {
         }
     }
 
-    async updateSetting(key, value) {
-        try {
-            const settings = { [key]: value };
-            await chrome.runtime.sendMessage({
-                action: 'updateSettings',
-                settings: settings
-            });
-        } catch (error) {
-            console.error('Setting update error:', error);
-            this.showError('Failed to update setting');
-        }
-    }
-
+    /**
+     * Enhanced event listeners with interaction tracking
+     * MODIFIED: Added comprehensive user interaction metrics
+     */
     setupEventListeners() {
-        // Settings controls - with null checks
+        // Settings controls with interaction tracking
         const enableMonitoring = document.getElementById('enableMonitoring');
         const enableNotifications = document.getElementById('enableNotifications');
         const sensitivitySlider = document.getElementById('sensitivitySlider');
 
         if (enableMonitoring) {
             enableMonitoring.addEventListener('change', e => {
+                const interactionStartTime = performance.now();
+                
+                // ADDED: Track settings changes
+                this.uiMetrics.userInteractions.settingsChanges.enableMonitoring = 
+                    (this.uiMetrics.userInteractions.settingsChanges.enableMonitoring || 0) + 1;
+                
                 this.updateSetting('enabled', e.target.checked);
+                
+                // ADDED: Track interaction latency
+                const latency = performance.now() - interactionStartTime;
+                this.uiMetrics.responsiveness.interactionLatencies.push({
+                    type: 'enableMonitoring',
+                    latency: latency,
+                    timestamp: Date.now()
+                });
             });
         }
 
         if (enableNotifications) {
             enableNotifications.addEventListener('change', e => {
+                const interactionStartTime = performance.now();
+                
+                this.uiMetrics.userInteractions.settingsChanges.enableNotifications = 
+                    (this.uiMetrics.userInteractions.settingsChanges.enableNotifications || 0) + 1;
+                
                 this.updateSetting('notificationsEnabled', e.target.checked);
+                
+                const latency = performance.now() - interactionStartTime;
+                this.uiMetrics.responsiveness.interactionLatencies.push({
+                    type: 'enableNotifications',
+                    latency: latency,
+                    timestamp: Date.now()
+                });
             });
         }
 
         if (sensitivitySlider) {
             sensitivitySlider.addEventListener('input', e => {
+                const interactionStartTime = performance.now();
+                
+                this.uiMetrics.userInteractions.settingsChanges.sensitivitySlider = 
+                    (this.uiMetrics.userInteractions.settingsChanges.sensitivitySlider || 0) + 1;
+                
                 this.updateSetting('sensitivity', parseFloat(e.target.value));
+                
+                const latency = performance.now() - interactionStartTime;
+                this.uiMetrics.responsiveness.interactionLatencies.push({
+                    type: 'sensitivitySlider',
+                    latency: latency,
+                    timestamp: Date.now()
+                });
             });
         }
 
-        // Action buttons - with null checks
+        // ADDED: Enhanced action buttons with click tracking
         const buttons = [
             { id: 'viewStatsBtn', handler: () => this.handleViewStats() },
             { id: 'manageWebsitesBtn', handler: () => this.handleManageWebsites() },
@@ -76,11 +149,27 @@ class PopupController {
         buttons.forEach(({ id, handler }) => {
             const element = document.getElementById(id);
             if (element) {
-                element.addEventListener('click', handler);
+                element.addEventListener('click', () => {
+                    const clickStartTime = performance.now();
+                    
+                    // ADDED: Track button clicks
+                    this.uiMetrics.userInteractions.buttonClicks[id] = 
+                        (this.uiMetrics.userInteractions.buttonClicks[id] || 0) + 1;
+                    
+                    handler();
+                    
+                    // ADDED: Track click response time
+                    const responseTime = performance.now() - clickStartTime;
+                    this.uiMetrics.responsiveness.interactionLatencies.push({
+                        type: `button_${id}`,
+                        latency: responseTime,
+                        timestamp: Date.now()
+                    });
+                });
             }
         });
 
-        // Feedback correctness buttons - FIXED METHOD NAMES
+        // ADDED: Enhanced feedback buttons with tracking
         const feedbackButtons = [
             { id: 'feedbackProductive', label: 'productive' },
             { id: 'feedbackNonproductive', label: 'non-productive' },
@@ -91,78 +180,140 @@ class PopupController {
             const element = document.getElementById(id);
             if (element) {
                 element.addEventListener('click', () => {
-                    this.submitFeedback(label); // FIXED: was submitFeedbackLabel
+                    const feedbackStartTime = performance.now();
+                    
+                    // ADDED: Track feedback submissions
+                    this.uiMetrics.userInteractions.feedbackSubmissions.push({
+                        label: label,
+                        timestamp: Date.now()
+                    });
+                    
+                    this.submitFeedback(label);
+                    
+                    // ADDED: Track feedback response time
+                    const responseTime = performance.now() - feedbackStartTime;
+                    this.uiMetrics.responsiveness.interactionLatencies.push({
+                        type: `feedback_${label}`,
+                        latency: responseTime,
+                        timestamp: Date.now()
+                    });
                 });
             }
         });
     }
 
-    async loadCurrentSettings() {
-        try {
-            const response = await chrome.runtime.sendMessage({ action: 'getStats' });
-            if (response && response.settings) {
-                this.updateUIFromSettings(response.settings);
-                this.isPaused = response.isPaused || false;
-                this.updatePauseButton();
-            }
-        } catch (error) {
-            console.warn('Settings load error:', error);
-            this.showError('Could not load settings');
-        }
-    }
-
-    startPeriodicUpdates() {
-        this.updateStats(); // Initial update
-        this.updateInterval = setInterval(() => {
-            this.updateStats();
-        }, 5000); // Update every 5 seconds
-    }
-
+    /**
+     * Enhanced stats update with performance tracking
+     * MODIFIED: Added comprehensive display update metrics
+     */
     async updateStats() {
+        const updateStartTime = performance.now();
+        
         try {
             const stats = await chrome.runtime.sendMessage({ action: 'getStats' });
             if (stats && !stats.error) {
+                // ADDED: Track individual update components
+                const sessionUpdateStart = performance.now();
                 this.updateSessionDisplay(stats);
+                const sessionUpdateTime = performance.now() - sessionUpdateStart;
+                
+                const mlUpdateStart = performance.now();
                 this.updateMLInsights(stats);
+                const mlUpdateTime = performance.now() - mlUpdateStart;
+                
+                const usageUpdateStart = performance.now();
                 this.updateUsageLevel(stats);
+                const usageUpdateTime = performance.now() - usageUpdateStart;
+                
+                const statusUpdateStart = performance.now();
                 this.updateLastUpdate();
                 this.updateStatusIndicator(stats);
+                const statusUpdateTime = performance.now() - statusUpdateStart;
+                
+                // ADDED: Record component update times
+                this.uiMetrics.displayUpdates.statsUpdates++;
+                this.uiMetrics.displayUpdates.mlInsightUpdates++;
+                this.uiMetrics.displayUpdates.usageLevelUpdates++;
+                this.uiMetrics.displayUpdates.statusUpdates++;
+                
+                // ADDED: Track DOM update performance
+                this.uiMetrics.performance.domUpdates.push({
+                    timestamp: Date.now(),
+                    sessionUpdate: sessionUpdateTime,
+                    mlUpdate: mlUpdateTime,
+                    usageUpdate: usageUpdateTime,
+                    statusUpdate: statusUpdateTime,
+                    totalUpdate: performance.now() - updateStartTime
+                });
+                
                 if (stats.needsFeedback) this.showFeedbackSection();
             }
+
+            // ADDED: Record total update time
+            const totalUpdateTime = performance.now() - updateStartTime;
+            this.uiMetrics.responsiveness.updateTimes.push({
+                timestamp: Date.now(),
+                updateTime: totalUpdateTime
+            });
+            
+            // Calculate average update time
+            const updateTimes = this.uiMetrics.responsiveness.updateTimes.map(u => u.updateTime);
+            this.uiMetrics.displayUpdates.averageUpdateTime = this.calculateMean(updateTimes);
+
         } catch (error) {
             console.warn('Stats update error:', error);
             this.showConnectionError();
         }
     }
 
+    /**
+     * Enhanced session display update with render tracking
+     * MODIFIED: Added render time tracking
+     */
     updateSessionDisplay(stats) {
+        const renderStartTime = performance.now();
+        
         const sessionData = stats.sessionStats || {};
         
-        // FIXED: Added null checks
         const sessionDuration = document.getElementById('sessionDuration');
         const websiteCount = document.getElementById('websiteCount');
         const activityLevel = document.getElementById('activityLevel');
-
+        
         if (sessionDuration) {
             sessionDuration.textContent = this.formatDuration(sessionData.sessionDuration || 0);
         }
+        
         if (websiteCount) {
             websiteCount.textContent = sessionData.domains?.length || '0';
         }
+        
         if (activityLevel) {
             const activityScore = this.calculateActivityLevel(sessionData);
             activityLevel.textContent = activityScore;
         }
+
+        // ADDED: Record render time
+        const renderTime = performance.now() - renderStartTime;
+        this.uiMetrics.responsiveness.renderTimes.push({
+            type: 'sessionDisplay',
+            renderTime: renderTime,
+            timestamp: Date.now()
+        });
     }
 
+    /**
+     * Enhanced ML insights update with performance tracking
+     * MODIFIED: Added ML display performance metrics
+     */
     updateMLInsights(stats) {
+        const renderStartTime = performance.now();
+        
         const recentPredictions = stats.recentPredictions || [];
         const latestPrediction = recentPredictions[recentPredictions.length - 1];
         
-        // FIXED: Added null checks
         const patternScore = document.getElementById('patternScore');
         const confidenceScore = document.getElementById('confidenceScore');
-
+        
         if (latestPrediction) {
             this.currentPrediction = latestPrediction;
             const patternScoreValue = Math.round((latestPrediction.prediction / 2) * 100);
@@ -178,7 +329,109 @@ class PopupController {
             if (confidenceScore) confidenceScore.textContent = '--';
             this.hideFeedbackSection();
         }
+
+        // ADDED: Record ML insights render time
+        const renderTime = performance.now() - renderStartTime;
+        this.uiMetrics.responsiveness.renderTimes.push({
+            type: 'mlInsights',
+            renderTime: renderTime,
+            timestamp: Date.now()
+        });
     }
+
+    // ADDED: Get comprehensive UI metrics for research analysis
+    getUIMetrics() {
+        const currentTime = Date.now();
+        
+        return {
+            // UI Responsiveness metrics
+            responsiveness: {
+                averageRenderTime: this.calculateMean(
+                    this.uiMetrics.responsiveness.renderTimes.map(r => r.renderTime)
+                ),
+                averageUpdateTime: this.calculateMean(
+                    this.uiMetrics.responsiveness.updateTimes.map(u => u.updateTime)
+                ),
+                averageInteractionLatency: this.calculateMean(
+                    this.uiMetrics.responsiveness.interactionLatencies.map(i => i.latency)
+                ),
+                totalRenderOperations: this.uiMetrics.responsiveness.renderTimes.length,
+                totalUpdateOperations: this.uiMetrics.responsiveness.updateTimes.length,
+                totalInteractions: this.uiMetrics.responsiveness.interactionLatencies.length
+            },
+            
+            // User interaction patterns
+            userInteractions: {
+                buttonClickDistribution: this.uiMetrics.userInteractions.buttonClicks,
+                settingsChanges: this.uiMetrics.userInteractions.settingsChanges,
+                feedbackSubmissions: {
+                    total: this.uiMetrics.userInteractions.feedbackSubmissions.length,
+                    distribution: this.calculateFeedbackDistribution()
+                }
+            },
+            
+            // Display performance
+            displayPerformance: {
+                ...this.uiMetrics.displayUpdates,
+                domUpdatePerformance: {
+                    averageSessionUpdate: this.calculateMean(
+                        this.uiMetrics.performance.domUpdates.map(d => d.sessionUpdate)
+                    ),
+                    averageMLUpdate: this.calculateMean(
+                        this.uiMetrics.performance.domUpdates.map(d => d.mlUpdate)
+                    ),
+                    averageUsageUpdate: this.calculateMean(
+                        this.uiMetrics.performance.domUpdates.map(d => d.usageUpdate)
+                    ),
+                    averageStatusUpdate: this.calculateMean(
+                        this.uiMetrics.performance.domUpdates.map(d => d.statusUpdate)
+                    ),
+                    averageTotalUpdate: this.calculateMean(
+                        this.uiMetrics.performance.domUpdates.map(d => d.totalUpdate)
+                    )
+                }
+            },
+            
+            // Overall performance summary
+            performanceSummary: {
+                initializationTime: this.uiMetrics.performance.initializationTime,
+                responsive: this.calculateMean(
+                    this.uiMetrics.responsiveness.interactionLatencies.map(i => i.latency)
+                ) < 100, // Less than 100ms is considered responsive
+                millisecondsLevel: true,
+                uiHealthy: this.isUIHealthy()
+            }
+        };
+    }
+
+    // ADDED: Calculate feedback distribution
+    calculateFeedbackDistribution() {
+        const distribution = {};
+        this.uiMetrics.userInteractions.feedbackSubmissions.forEach(feedback => {
+            distribution[feedback.label] = (distribution[feedback.label] || 0) + 1;
+        });
+        return distribution;
+    }
+
+    // ADDED: Determine if UI is performing healthily
+    isUIHealthy() {
+        const avgInteractionLatency = this.calculateMean(
+            this.uiMetrics.responsiveness.interactionLatencies.map(i => i.latency)
+        );
+        const avgRenderTime = this.calculateMean(
+            this.uiMetrics.responsiveness.renderTimes.map(r => r.renderTime)
+        );
+        
+        // UI is healthy if average latencies are under thresholds
+        return avgInteractionLatency < 100 && avgRenderTime < 50;
+    }
+
+    // ADDED: Helper method to calculate mean
+    calculateMean(values) {
+        if (!values || values.length === 0) return 0;
+        return values.reduce((sum, val) => sum + val, 0) / values.length;
+    }
+
 
     updateUsageLevel(stats) {
         const recentPredictions = stats.recentPredictions || [];
