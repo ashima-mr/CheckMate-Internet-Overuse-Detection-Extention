@@ -3,265 +3,145 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CheckMate - Internet Overuse Detection</title>
+    <title>CheckMate - Internet Usage Monitor</title>
     <link rel="stylesheet" href="popup.css">
 </head>
 <body>
     <div class="container">
         <!-- Header -->
-        <header class="header">
+        <div class="header">
             <div class="logo">
-                <div class="logo-icon">🔍</div>
+                <div class="logo-icon">🛡️</div>
                 <h1 class="title">CheckMate</h1>
             </div>
-            <div id="statusIndicator" class="status-indicator">
-                <div class="status-dot"></div>
-                <span class="status-text">Active</span>
-            </div>
-            <div id="drift-status" class="status-item">
-                    <span class="status-dot"></span>
-                    <span>No Drift</span>
-                </div>
-        </header>
-
-        <!-- Navigation Tabs -->
-        <nav class="tab-navigation">
-            <button class="tab-btn active" data-tab="overview">Overview</button>
-            <button class="tab-btn" data-tab="tree">Tree View</button>
-            <button class="tab-btn" data-tab="performance">Performance</button>
-            <button class="tab-btn" data-tab="settings">Settings</button>
-        </nav>
-
-        <!-- Overview Tab -->
-        <div id="overview-tab" class="tab-content active">
-            <div class="metrics-grid">
-                <div class="metric-card">
-                    <h3>Instances Processed</h3>
-                    <div id="instances-count" class="metric-value">0</div>
-                </div>
-                <div class="metric-card">
-                    <h3>Current Accuracy</h3>
-                    <div id="accuracy-value" class="metric-value">0%</div>
-                </div>
-                <div class="metric-card">
-                    <h3>Tree Depth</h3>
-                    <div id="tree-depth" class="metric-value">0</div>
-                </div>
-                <div class="metric-card">
-                    <h3>Drift Events</h3>
-                    <div id="drift-count" class="metric-value">0</div>
-                </div>
-            </div>
-
-            <!-- Real-time Performance Chart -->
-            <div class="chart-section">
-                <h3>Real-time Performance</h3>
-                <div id="performance-chart"></div>
-            </div>
-
-            <!-- Recent Predictions -->
-            <div class="predictions-section">
-                <h3>Recent Predictions</h3>
-                <div id="predictions-list"></div>
-            </div>
-        </div>
-
-        <!-- Tree Visualization Tab -->
-        <div id="tree-tab" class="tab-content">
-            <div class="tree-controls">
-                <button id="refresh-tree">Refresh Tree</button>
-                <button id="export-tree">Export JSON</button>
-                <label>
-                    Layout:
-                    <select id="tree-layout">
-                        <option value="tree">Tree</option>
-                        <option value="cluster">Cluster</option>
-                        <option value="radial">Radial</option>
-                    </select>
-                </label>
-            </div>
-            <div id="tree-visualization"></div>
-        </div>
-
-        <!-- Performance Analytics Tab -->
-        <div id="performance-tab" class="tab-content">
-            <div class="analytics-grid">
-                <div class="chart-container">
-                    <h3>Accuracy Over Time</h3>
-                    <div id="accuracy-chart"></div>
-                </div>
-                <div class="chart-container">
-                    <h3>Drift Detection Events</h3>
-                    <div id="drift-chart"></div>
-                </div>
-                <div class="chart-container">
-                    <h3>Class Distribution</h3>
-                    <div id="class-distribution-chart"></div>
-                </div>
-                <div class="chart-container">
-                    <h3>Feature Importance</h3>
-                    <div id="feature-importance-chart"></div>
+            <div class="status-indicators">
+                <div id="statusIndicator" class="status-indicator">
+                    <span class="status-dot active"></span>
+                    <span class="status-text">Active</span>
                 </div>
             </div>
         </div>
 
-        <!-- Settings Tab -->
-        <div id="settings-tab" class="tab-content">
-            <div class="settings-form">
-                <h3>Model Configuration</h3>
-                <div class="form-group">
-                    <label for="sensitivity">Sensitivity:</label>
-                    <input type="range" id="sensitivity" min="0.01" max="1" step="0.01" value="0.05">
-                    <span id="sensitivity-value">0.05</span>
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Current Session Status -->
+            <div class="status-section">
+                <h2>Current Session</h2>
+                <div class="session-stats">
+                    <div class="stat-item">
+                        <span class="stat-label">Duration</span>
+                        <span id="sessionDuration" class="stat-value">--</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Websites</span>
+                        <span id="websiteCount" class="stat-value">--</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Activity</span>
+                        <span id="activityLevel" class="stat-value">--</span>
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label for="grace-period">Grace Period:</label>
-                    <input type="number" id="grace-period" min="50" max="500" value="200">
+                
+                <!-- Usage Health Indicator -->
+                <div class="usage-indicator">
+                    <span id="usageLabel" class="usage-label">Real-Time Usage Health Indicator</span>
+                    <div class="usage-bar">
+                        <div id="usageFill" class="usage-fill"></div>
+                    </div>
+                    <div class="usage-scale">
+                        <span>Healthy</span>
+                        <span>Moderate</span>
+                        <span>Concerning</span>
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label for="drift-method">Drift Detection:</label>
-                    <select id="drift-method">
-                        <option value="SPC">Statistical Process Control</option>
-                        <option value="ADWIN">ADWIN</option>
-                    </select>
+            </div>
+
+            <!-- AI Insights (Simplified) -->
+            <div class="insights-section">
+                <h2>AI Assessment</h2>
+                <div class="insight-grid">
+                    <div class="insight-item">
+                        <span class="insight-label">Pattern Alignment</span>
+                        <span id="patternScore" class="insight-value">--</span>
+                    </div>
+                    <div class="insight-item">
+                        <span class="insight-label">AI Confidence</span>
+                        <span id="confidenceScore" class="insight-value">--</span>
+                    </div>
                 </div>
-                <button id="reset-model" class="action-btn warning">Reset Model</button>
-                <button id="export-data" class="action-btn">Export Data</button>
+            </div>
+
+            <!-- Recent Prediction Display -->
+            <div id="recentPrediction" class="prediction-display">
+                <h3>Latest Classification</h3>
+                <div id="predictionDetails" class="prediction-content"></div>
+            </div>
+
+            <div id="feedbackSection" class="feedback-section">
+                <div class="feedback-question">
+                    <p>How would you classify your current session?</p>
+                    <div class="feedback-buttons">
+                        <button id="feedbackProductive" class="btn-feedback btn-productive">✅ Productive</button>
+                        <button id="feedbackNonproductive" class="btn-feedback btn-nonproductive">😐 Non-Productive</button>
+                        <button id="feedbackOveruse" class="btn-feedback btn-overuse">⚠️ Overuse</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Controls -->
+            <div class="controls-section">
+                <div class="setting-item">
+                    <span class="setting-label">Enable Monitoring</span>
+                    <label class="switch">
+                        <input type="checkbox" id="enableMonitoring" checked>
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                
+                <div class="setting-item">
+                    <span class="setting-label">Enable Notifications</span>
+                    <label class="switch">
+                        <input type="checkbox" id="enableNotifications" checked>
+                        <span class="slider"></span>
+                    </label>
+                </div>
+
+                <div class="sensitivity-control">
+                    <span class="setting-label">Detection Sensitivity</span>
+                    <input type="range" id="sensitivitySlider" class="sensitivity-slider" 
+                           min="0.01" max="0.1" step="0.01" value="0.05">
+                    <div class="sensitivity-labels">
+                        <span>Low</span>
+                        <span>High</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="actions-section">
+                <div class="action-row">
+                    <button id="viewStatsBtn" class="btn btn-primary">📊 View Detailed Stats</button>
+                    <button id="manageWebsitesBtn" class="btn btn-secondary">🔗 Manage Categories</button>
+                </div>
+                <div class="action-row">
+                    <button id="pauseBtn" class="btn btn-secondary">⏸️ Pause</button>
+                    <button id="takeBreakBtn" class="btn btn-primary">☕ Take Break</button>
+                </div>
+                
+                <!-- Privacy Controls -->
+                <div class="privacy-controls">
+                    <button id="downloadDataBtn" class="btn btn-secondary">💾 Download Data</button>
+                    <button id="deleteDataBtn" class="btn btn-danger">🗑️ Delete All Data</button>
+                </div>
             </div>
         </div>
-
-        <!-- Status Section -->
-        <section class="status-section">
-            <h2>Current Session</h2>
-            <div class="session-stats">
-                <div class="stat-item">
-                    <span class="stat-label">Duration</span>
-                    <span class="stat-value" id="sessionDuration">--</span>
-                </div>
-                <div class="stat-item">
-                    <span class="stat-label">Websites</span>
-                    <span class="stat-value" id="websiteCount">--</span>
-                </div>
-                <div class="stat-item">
-                    <span class="stat-label">Activity</span>
-                    <span class="stat-value" id="activityLevel">--</span>
-                </div>
-            </div>
-
-            <!-- Usage Health Indicator -->
-            <div class="usage-indicator">
-                <span class="usage-label" id="usageLabel">Recent Usage Health Indicator</span>
-                <div class="usage-bar">
-                    <div class="usage-fill" id="usageFill"></div>
-                </div>
-                <div class="usage-scale">
-                    <span>Healthy</span>
-                    <span>Moderate</span>
-                    <span>Concerning</span>
-                </div>
-            </div>
-        </section>
-
-        <!-- Session Feedback Section -->
-        <section id="sessionFeedbackSection" class="feedback-section">
-            <h2>Session Feedback</h2>
-            <div class="feedback-question">
-                <p>How would you classify your current session?</p>
-            </div>
-            <div class="feedback-buttons">
-                <button id="feedbackProductive" class="btn-feedback btn-productive">✅ Productive</button>
-                <button id="feedbackNonproductive" class="btn-feedback btn-nonproductive">😐 Non-Productive</button>
-                <button id="feedbackOveruse" class="btn-feedback btn-overuse">⚠️ Overuse</button>
-            </div>
-        </section>
-
-        <!-- ML Insights Section -->
-        <section class="insights-section">
-            <h2>AI Analysis</h2>
-            <div class="insight-grid">
-                <div class="insight-item">
-                    <span class="insight-label">Activity Pattern Alignment with Typical Overuse</span>
-                    <span class="insight-value" id="patternScore">--</span>
-                </div>
-                <div class="insight-item">
-                    <span class="insight-label">AI Assessment Confidence</span>
-                    <span class="insight-value" id="confidenceScore">--</span>
-                </div>
-            </div>
-        </section>
-
-        <!-- Controls Section -->
-        <section class="controls-section">
-            <div class="setting-item">
-                <span class="setting-label">Enable Extention</span>
-                <label class="switch">
-                    <input type="checkbox" id="enableMonitoring" checked>
-                    <span class="slider"></span>
-                </label>
-            </div>
-
-            <div class="setting-item">
-                <span class="setting-label">Enable Notifications</span>
-                <label class="switch">
-                    <input type="checkbox" id="enableNotifications" checked>
-                    <span class="slider"></span>
-                </label>
-            </div>
-
-            <div class="sensitivity-control">
-                <span class="setting-label">Detection Sensitivity</span>
-                <input type="range" id="sensitivitySlider" class="sensitivity-slider" 
-                       min="0.1" max="1.0" step="0.1" value="0.5">
-                <div class="sensitivity-labels">
-                    <span>Low</span>
-                    <span>High</span>
-                </div>
-            </div>
-        </section>
-
-        <!-- Actions Section -->
-        <section class="actions-section">
-            <div class="action-row">
-                <button id="viewStatsBtn" class="btn btn-primary">
-                    📊 View Detailed Stats
-                </button>
-                <button id="manageWebsitesBtn" class="btn btn-secondary">
-                    🔗 Manage Website Lists
-                </button>
-            </div>
-
-            <div class="action-row">
-                <button id="pauseBtn" class="btn btn-secondary">
-                    ⏸️ Pause
-                </button>
-                <button id="takeBreakBtn" class="btn btn-primary">
-                    ☕ Take Break
-                </button>
-            </div>
-
-            <!-- Privacy Controls -->
-            <div class="privacy-controls">
-                <button id="downloadDataBtn" class="btn btn-secondary">
-                    💾 Download Data
-                </button>
-                <button id="deleteDataBtn" class="btn btn-danger">
-                    🗑️ Delete All Data
-                </button>
-            </div>
-        </section>
 
         <!-- Footer -->
-        <footer class="footer">
-            <div class="last-update">
-                Last update: <span id="lastUpdate">--</span>
-            </div>
-        </footer>
+        <div class="footer">
+            <span class="last-update">Last updated: <span id="lastUpdate">--</span></span>
+        </div>
     </div>
 
-    <script src="lib/d3.v7.min.js"></script>
-    <script src="lib/dagre-d3.min.js"></script>
-    <script type="module" src="feedback-manager.js"></script>
     <script src="popup.js"></script>
-    <script src="dashboard.js"></script>
 </body>
 </html>

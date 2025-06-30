@@ -1,162 +1,351 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <meta charset="utf-8">
-    <title>CheckMate - Detailed Statistics</title>
-    <script src="lib/chart.umd.min.js"></script>
-    <script src="stats.js"></script>
-    <link rel="stylesheet" href="stats.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CheckMate - Analytics Dashboard</title>
+    <link rel="stylesheet" href="dashboard.css">
 </head>
 <body>
-    <div class="dashboard-container">
+    <div id="dashboard-container">
         <!-- Header -->
-        <header class="dashboard-header">
-            <h1>CheckMate Analytics Dashboard</h1>
-            <div class="header-controls">
-                <select id="timeRangeSelect">
-                    <option value="24h">Last 24 Hours</option>
-                    <option value="7d">Last 7 Days</option>
-                    <option value="30d">Last 30 Days</option>
-                </select>
-                <button id="exportDashboard" class="btn btn-secondary">Export Report</button>
+        <div class="dashboard-header">
+            <div>
+                <h1>CheckMate Analytics Dashboard</h1>
+                <p class="subtitle">Comprehensive Internet Usage Monitoring & ML Analysis</p>
             </div>
-        </header>
-
-        <!-- Summary KPIs -->
-        <section class="kpi-section">
-            <div class="kpi-grid">
-                <div class="kpi-card">
-                    <h3>Total Sessions</h3>
-                    <div class="kpi-value" id="totalSessions">--</div>
-                    <div class="kpi-change positive" id="sessionsChange">+0%</div>
+            <div class="status-indicators">
+                <div class="status-card">
+                    <div class="status-icon">
+                        <span id="statusDot" class="status-dot active"></span>
+                    </div>
+                    <div class="status-info">
+                        <span>System Status</span>
+                        <span id="systemStatus">Active</span>
+                    </div>
                 </div>
-                <div class="kpi-card">
-                    <h3>Total Predictions</h3>
-                    <div class="kpi-value" id="totalPredictions">--</div>
-                    <div class="kpi-change" id="predictionsChange">+0%</div>
-                </div>
-                <div class="kpi-card">
-                    <h3>Health Score</h3>
-                    <div class="kpi-value" id="overallHealthScore">--</div>
-                    <div class="kpi-change" id="healthChange">+0%</div>
-                </div>
-                <div class="kpi-card">
-                    <h3>Average Confidence</h3>
-                    <div class="kpi-value" id="avgConfidence">--</div>
-                    <div class="kpi-change" id="confidenceChange">+0%</div>
-                </div>
-                <div class="kpi-card">
-                    <h3>User Feedback</h3>
-                    <div class="kpi-value" id="feedbackCount">--</div>
-                    <div class="kpi-change" id="feedbackChange">+0%</div>
+                <div class="status-card">
+                    <div class="accuracy-indicator">
+                        <span>Accuracy: </span>
+                        <span id="currentAccuracy">--</span>
+                    </div>
                 </div>
             </div>
-        </section>
+        </div>
 
-        <!-- Charts Section -->
-        <section class="charts-section">
-            <div class="chart-grid">
-                <!-- Usage Classification Over Time -->
-                <div class="chart-container">
-                    <h3>Usage Classification Over Time</h3>
-                    <canvas id="classificationChart"></canvas>
+        <!-- Tab Navigation -->
+        <div class="tab-navigation">
+            <button class="tab-btn active" data-tab="overview">📊 Overview</button>
+            <button class="tab-btn" data-tab="tree">🌳 Model Tree</button>
+            <button class="tab-btn" data-tab="performance">📈 Performance</button>
+            <button class="tab-btn" data-tab="feedback">💬 Feedback</button>
+            <button class="tab-btn" data-tab="settings">⚙️ Settings</button>
+        </div>
+
+        <!-- Tab Content Wrapper -->
+        <div class="tab-content-wrapper">
+            <!-- Overview Tab -->
+            <div id="overview-tab" class="tab-content active">
+                <!-- Key Performance Metrics -->
+                <div class="performance-metrics">
+                    <div class="metric-card">
+                        <div class="metric-label">Total Sessions</div>
+                        <div id="totalSessions" class="metric-value">0</div>
+                        <div class="metric-subtitle">Monitored sessions</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-label">Model Accuracy</div>
+                        <div id="overallAccuracy" class="metric-value">0%</div>
+                        <div class="metric-subtitle">Last 100 predictions</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-label">Health Score</div>
+                        <div id="healthScore" class="metric-value">--</div>
+                        <div class="metric-subtitle">Usage health rating</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-label">Feedback Count</div>
+                        <div id="feedbackCount" class="metric-value">0</div>
+                        <div class="metric-subtitle">User corrections</div>
+                    </div>
                 </div>
 
-                <!-- Confidence Levels -->
-                <div class="chart-container">
-                    <h3>AI Assessment Confidence</h3>
-                    <canvas id="confidenceChart"></canvas>
+                <!-- Charts Grid -->
+                <div class="overview-grid">
+                    <div class="chart-section">
+                        <div class="chart-header">
+                            <h3>Usage Classification Over Time</h3>
+                            <button id="refreshClassificationChart" class="btn-small">🔄 Refresh</button>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="classificationChart"></canvas>
+                            <div class="chart-loading">Loading...</div>
+                            <div class="chart-error">Failed to load chart</div>
+                        </div>
+                    </div>
+
+                    <div class="chart-section">
+                        <div class="chart-header">
+                            <h3>AI Confidence Trend</h3>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="confidenceChart"></canvas>
+                            <div class="chart-loading">Loading...</div>
+                            <div class="chart-error">Failed to load chart</div>
+                        </div>
+                    </div>
                 </div>
 
-                <!-- Activity Patterns -->
-                <div class="chart-container">
-                    <h3>Daily Activity Patterns</h3>
-                    <canvas id="activityChart"></canvas>
+                <div class="overview-grid">
+                    <div class="chart-section">
+                        <div class="chart-header">
+                            <h3>Daily Activity Patterns</h3>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="activityChart"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="chart-section">
+                        <div class="chart-header">
+                            <h3>Class Distribution</h3>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="classDistributionChart"></canvas>
+                        </div>
+                    </div>
                 </div>
 
-                <!-- Category Distribution -->
-                <div class="chart-container">
-                    <h3>Website Category Distribution</h3>
-                    <canvas id="categoryChart"></canvas>
+                <!-- Recent Predictions Table -->
+                <div class="chart-section">
+                    <div class="chart-header">
+                        <h3>Recent Predictions</h3>
+                        <div>
+                            <select id="predictionFilter" class="select-control">
+                                <option value="all">All Classifications</option>
+                                <option value="0">Productive Only</option>
+                                <option value="1">Non-Productive Only</option>
+                                <option value="2">Overuse Only</option>
+                            </select>
+                            <button id="refreshPredictions" class="btn-small">🔄 Refresh</button>
+                        </div>
+                    </div>
+                    <div class="predictions-table">
+                        <div class="prediction-row" style="font-weight: bold; background: var(--color-secondary);">
+                            <span>Time</span>
+                            <span>Classification</span>
+                            <span>Confidence</span>
+                            <span>Feedback</span>
+                        </div>
+                        <div id="predictionsTableBody">
+                            <!-- Predictions populated dynamically -->
+                        </div>
+                    </div>
                 </div>
             </div>
-        </section>
 
-        <!-- Data Tables -->
-        <section class="tables-section">
-            <!-- Recent Predictions -->
-            <div class="table-container">
-                <h3>Recent Predictions</h3>
-                <div class="table-controls">
-                    <input type="text" id="searchPredictions" placeholder="Search predictions...">
-                    <select id="filterClass">
-                        <option value="all">All Classes</option>
-                        <option value="0">Productive</option>
-                        <option value="1">Unproductive</option>
-                        <option value="2">Unhealthy</option>
+            <!-- Tree Visualization Tab -->
+            <div id="tree-tab" class="tab-content">
+                <div class="tree-controls">
+                    <button id="refreshTree" class="btn-primary">🔄 Refresh Tree</button>
+                    <button id="exportTreeJSON" class="btn-secondary">💾 Export JSON</button>
+                    <button id="centerTree" class="btn-secondary">🎯 Center View</button>
+                    <select id="treeLayout" class="select-control">
+                        <option value="tree">Tree Layout</option>
+                        <option value="cluster">Cluster Layout</option>
+                        <option value="radial">Radial Layout</option>
                     </select>
+                    <label>
+                        Node Size: 
+                        <input type="range" id="nodeSizeRange" min="3" max="15" value="6" class="range-control">
+                    </label>
                 </div>
-                <table class="data-table">
-                    <thead>
-                        <tr>
-                            <th>Time</th>
-                            <th>Classification</th>
-                            <th>Confidence</th>
-                            <th>Pattern Score</th>
-                            <th>Feedback</th>
-                        </tr>
-                    </thead>
-                    <tbody id="predictionsTableBody">
-                        <!-- Populated by JavaScript -->
-                    </tbody>
-                </table>
+
+                <div class="tree-container" id="treeVisualization">
+                    <div class="tree-loading">
+                        <div class="spinner-large"></div>
+                        <p>Loading decision tree structure...</p>
+                    </div>
+                </div>
+
+                <!-- Tree Legend -->
+                <div class="tree-legend">
+                    <h4>Node Types</h4>
+                    <div class="legend-grid">
+                        <div class="legend-item">
+                            <div class="node-sample leaf"></div>
+                            <span>Leaf Node (Decision)</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="node-sample split"></div>
+                            <span>Split Node (Feature Test)</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="node-sample root"></div>
+                            <span>Root Node</span>
+                        </div>
+                    </div>
+                </div>
             </div>
 
-            <!-- Feedback History -->
-            <div class="table-container">
-                <h3>User Feedback History</h3>
-                <table class="data-table">
-                    <thead>
-                        <tr>
-                            <th>Time</th>
-                            <th>Action</th>
-                            <th>Original Prediction</th>
-                            <th>User Classification</th>
-                            <th>Impact</th>
-                        </tr>
-                    </thead>
-                    <tbody id="feedbackTableBody">
-                        <!-- Populated by JavaScript -->
-                    </tbody>
-                </table>
-            </div>
-        </section>
+            <!-- Performance Analytics Tab -->
+            <div id="performance-tab" class="tab-content">
+                <div class="overview-grid">
+                    <div class="chart-section">
+                        <div class="chart-header">
+                            <h3>Accuracy Over Time</h3>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="accuracyChart"></canvas>
+                        </div>
+                    </div>
 
-        <!-- Model Performance -->
-        <section class="performance-section">
-            <h3>Model Performance Metrics</h3>
-            <div class="performance-grid">
-                <div class="metric-card">
-                    <h4>Tree Depth</h4>
-                    <div class="metric-value" id="treeDepth">--</div>
+                    <div class="chart-section">
+                        <div class="chart-header">
+                            <h3>Drift Detection Events</h3>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="driftChart"></canvas>
+                        </div>
+                    </div>
                 </div>
-                <div class="metric-card">
-                    <h4>Leaf Nodes</h4>
-                    <div class="metric-value" id="leafCount">--</div>
-                </div>
-                <div class="metric-card">
-                    <h4>Drift Events</h4>
-                    <div class="metric-value" id="driftCount">--</div>
-                </div>
-                <div class="metric-card">
-                    <h4>Feedback Accuracy</h4>
-                    <div class="metric-value" id="feedbackAccuracy">--</div>
+
+                <div class="overview-grid">
+                    <div class="chart-section">
+                        <div class="chart-header">
+                            <h3>Feature Importance</h3>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="featureImportanceChart"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="chart-section">
+                        <div class="chart-header">
+                            <h3>Model Performance Stats</h3>
+                        </div>
+                        <div style="padding: 20px;">
+                            <div class="performance-metrics">
+                                <div class="metric-card">
+                                    <div class="metric-label">Tree Depth</div>
+                                    <div id="treeDepth" class="metric-value">0</div>
+                                </div>
+                                <div class="metric-card">
+                                    <div class="metric-label">Leaf Nodes</div>
+                                    <div id="leafNodes" class="metric-value">0</div>
+                                </div>
+                                <div class="metric-card">
+                                    <div class="metric-label">Drift Events</div>
+                                    <div id="driftEvents" class="metric-value">0</div>
+                                </div>
+                                <div class="metric-card">
+                                    <div class="metric-label">Training Samples</div>
+                                    <div id="trainingSamples" class="metric-value">0</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
-        </section>
+
+            <!-- Feedback Management Tab -->
+            <div id="feedback-tab" class="tab-content">
+                <div class="feedback-grid">
+                    <div class="feedback-section">
+                        <h3>Submit Feedback</h3>
+                        <p>Correct the AI's classification to improve accuracy:</p>
+                        <div class="feedback-buttons">
+                            <button id="submitProductiveFeedback" class="feedback-btn productive">✅ Productive</button>
+                            <button id="submitNonProductiveFeedback" class="feedback-btn non-productive">⚠️ Non-Productive</button>
+                            <button id="submitOveruseFeedback" class="feedback-btn overuse">🚫 Overuse</button>
+                        </div>
+                        <div class="feedback-reasoning">
+                            <label for="feedbackReasoning">Reasoning (optional):</label>
+                            <textarea id="feedbackReasoning" placeholder="Why did you choose this classification?"></textarea>
+                            <button id="submitDetailedFeedback" class="btn-primary">Submit Feedback</button>
+                        </div>
+                    </div>
+
+                    <div class="feedback-history">
+                        <h3>Feedback History</h3>
+                        <div id="feedbackHistoryList">
+                            <!-- Feedback history populated dynamically -->
+                        </div>
+                    </div>
+
+                    <div class="feedback-stats">
+                        <h3>Feedback Impact</h3>
+                        <div class="chart-container">
+                            <canvas id="feedbackImpactChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Settings Tab -->
+            <div id="settings-tab" class="tab-content">
+                <div class="settings-section">
+                    <h3>Model Configuration</h3>
+                    <div class="form-group">
+                        <label for="sensitivitySetting">Sensitivity:</label>
+                        <input type="range" id="sensitivitySetting" min="0.01" max="0.1" step="0.01" value="0.05" class="range-control">
+                        <span id="sensitivityValue">0.05</span>
+                        <small>Lower values = more sensitive to changes</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="gracePeriod">Grace Period:</label>
+                        <input type="number" id="gracePeriod" value="200" min="50" max="500" class="form-control">
+                        <small>Number of instances before splitting</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="driftDetection">Drift Detection Method:</label>
+                        <select id="driftDetection" class="select-control">
+                            <option value="SPC">Statistical Process Control</option>
+                            <option value="ADWIN">ADWIN</option>
+                        </select>
+                    </div>
+
+                    <h3>Data Management</h3>
+                    <div class="form-group">
+                        <button id="exportAllData" class="btn-primary">📤 Export All Data</button>
+                        <button id="resetModel" class="btn-warning">🔄 Reset Model</button>
+                        <button id="clearHistory" class="btn-danger">🗑️ Clear History</button>
+                    </div>
+
+                    <h3>Visualization Settings</h3>
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="autoRefreshCharts" checked> Auto-refresh charts
+                        </label>
+                    </div>
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="showAnimations" checked> Show animations
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Loading Overlay -->
+        <div id="loadingOverlay" class="loading-overlay">
+            <div class="loading-content">
+                <div class="spinner-large"></div>
+                <p>Processing...</p>
+            </div>
+        </div>
+
+        <!-- Toast Container -->
+        <div id="toastContainer" class="toast-container"></div>
     </div>
 
-    <script src="lib/chart.umd.min.js"></script>
+    <!-- Local Chart.js Library -->
+    <script src="lib/chart.min.js"></script>
+    <!-- D3.js for tree visualization -->
+    <script src="lib/d3.min.js"></script>
+    <!-- Main Dashboard Script -->
     <script src="stats.js"></script>
 </body>
 </html>
