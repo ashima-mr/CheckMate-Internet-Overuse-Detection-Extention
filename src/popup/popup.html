@@ -72,8 +72,12 @@
                     </div>
                 </div>
             </div>
-            <!-- Session Feedback Section -->
-            <section id="sessionFeedbackSection" class="feedback-section">
+
+            <!-- Session Feedback Section (always visible) -->
+            <section id="sessionFeedbackSection" class="feedback-section" style="display:block;">
+                <div id="feedbackPromptBanner" class="feedback-banner" style="display:none; background:#ffe066; color:#333; padding:8px; border-radius:6px; margin-bottom:8px; font-weight:bold;">
+                    Help improve CheckMate: Please classify your session to jump-start the AI!
+                </div>
                 <h2>Session Feedback</h2>
                 <div class="feedback-question">
                     <p>How would you classify your current session?</p>
@@ -82,6 +86,14 @@
                     <button id="feedbackProductive" class="btn-feedback btn-productive">✅ Productive</button>
                     <button id="feedbackNonproductive" class="btn-feedback btn-nonproductive">😐 Non-Productive</button>
                     <button id="feedbackOveruse" class="btn-feedback btn-overuse">⚠️ Overuse</button>
+                </div>
+            </section>
+
+            <!-- Recent Predictions Section -->
+            <section id="recentPredictionsSection" class="recent-predictions-section">
+                <h2>Recent Predictions</h2>
+                <div id="recentPredictionsList" class="recent-predictions-list">
+                    <!-- Populated by popup.js -->
                 </div>
             </section>
 
@@ -128,6 +140,9 @@
                 </div>
             </section>
 
+            <!-- Error/Log Area -->
+            <div id="popupLogArea" style="display:none; color:#e53e3e; font-size:13px; margin:8px 0;"></div>
+
             <!-- Actions Section -->
             <section class="actions-section">
                 <div class="action-row">
@@ -140,9 +155,9 @@
                     <button id="takeBreakBtn" class="btn btn-primary">☕ Take Break</button>
                 </div>
 
-                <!-- Privacy Controls -->
                 <div class="privacy-controls">
                     <button id="downloadDataBtn" class="btn btn-secondary">💾 Download Data</button>
+                    <button id="exportMetricsBtn" class="btn btn-secondary">📤 Export Research Metrics</button>
                     <button id="deleteDataBtn" class="btn btn-danger">🗑️ Delete All Data</button>
                 </div>
             </section>

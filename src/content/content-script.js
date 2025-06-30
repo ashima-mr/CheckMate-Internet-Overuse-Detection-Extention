@@ -153,7 +153,7 @@ class PageActivityMonitor {
         }, { passive: true });
 
         // ADDED: Enhanced focus tracking with engagement metrics
-        window.addEventListener('focus', () => {
+        window.addEventListener('focus', (event) => {
             const eventStartTime = performance.now();
             
             this.isPageVisible = true;
@@ -178,7 +178,7 @@ class PageActivityMonitor {
             });
         });
 
-        window.addEventListener('blur', () => {
+        window.addEventListener('blur', (event) => {
             const eventStartTime = performance.now();
             
             this.isPageVisible = false;
@@ -204,7 +204,7 @@ class PageActivityMonitor {
         });
 
         // ADDED: Enhanced page visibility tracking
-        document.addEventListener('visibilitychange', () => {
+        document.addEventListener('visibilitychange', (event) => {
             const eventStartTime = performance.now();
             
             this.isPageVisible = !document.hidden;
@@ -225,7 +225,7 @@ class PageActivityMonitor {
             
             this.recordActivity('visibilitychange', {
                 visible: this.isPageVisible,
-                timestamp: now
+                timestamp: Date.now()
             });
 
             // ADDED: Track event processing time
@@ -576,6 +576,61 @@ class PageActivityMonitor {
         // Optionally, keep buffer size manageable
         if (this.activityBuffer.length > 500) {
             this.activityBuffer.shift();
+        }
+    }
+
+    calculateActivityScore() {
+        // Simple activity score: weighted sum of scrolls, clicks, keystrokes per minute
+        const now = Date.now();
+        const minutes = Math.max((now - this.startTime) / 60000, 1);
+        const score = (this.scrollCount + this.clickCount + this.keystrokes) / minutes;
+        return Math.round(score * 10) / 10; // One decimal place
+    }
+
+    /**
+     * Calculate engagement level based on activity and visibility
+     * Returns: 'high', 'medium', or 'low'
+     */
+    calculateEngagementLevel() {
+        // Example: simple heuristic based on activity score and visibility
+        const activityScore = this.calculateActivityScore();
+        const visibleRatio = this.isPageVisible ? 1 : 0;
+        if (activityScore > 30 && visibleRatio > 0.8) return 'high';
+        if (activityScore > 10 && visibleRatio > 0.5) return 'medium';
+        return 'low';
+    }
+
+    reportFinalStats() {
+        // Report final stats before unload (similar to reportPeriodicStats)
+        const now = Date.now();
+        const timeOnPage = now - this.startTime;
+        const timeSinceLastActivity = now - this.lastActivityTime;
+        const interactionCount = this.scrollCount + this.clickCount + this.keystrokes;
+        const interactionFrequency = interactionCount / (timeOnPage / 1000);
+        const stats = {
+            url: window.location.href,
+            hostname: window.location.hostname,
+            timeOnPage,
+            timeSinceLastActivity,
+            scrollCount: this.scrollCount,
+            clickCount: this.clickCount,
+            keystrokes: this.keystrokes,
+            isVisible: this.isPageVisible,
+            activityScore: this.calculateActivityScore(),
+            engagementLevel: this.calculateEngagementLevel ? this.calculateEngagementLevel() : 'unknown',
+            timestamp: now,
+            browserMetrics: {
+                eventCapture: { ...this.browserMetrics.eventCapture },
+                performance: { ...this.browserMetrics.performance },
+                interactionPatterns: { ...this.browserMetrics.interactionPatterns },
+                engagement: { ...this.browserMetrics.engagement }
+            }
+        };
+        // Send to background or log
+        try {
+            chrome.runtime.sendMessage({ action: 'finalStats', stats });
+        } catch (e) {
+            console.warn('Failed to send final stats:', e);
         }
     }
 }

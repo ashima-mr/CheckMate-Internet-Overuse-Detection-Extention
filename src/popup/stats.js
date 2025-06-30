@@ -103,15 +103,28 @@ class StatsController {
         // Export buttons
         document.getElementById('exportTreeJSON')?.addEventListener('click', () => this.exportTreeData());
         document.getElementById('exportAllData')?.addEventListener('click', () => this.exportAllData());
+        document.getElementById('exportInferenceLatency')?.addEventListener('click', () => this.exportChartData('inferenceLatency'));
+        document.getElementById('exportThroughput')?.addEventListener('click', () => this.exportChartData('throughput'));
+        document.getElementById('exportMemoryUtilization')?.addEventListener('click', () => this.exportChartData('memoryUtilization'));
+        document.getElementById('exportFeatureHistograms')?.addEventListener('click', () => this.exportChartData('featureHistograms'));
+        document.getElementById('exportAccuracyCurve')?.addEventListener('click', () => this.exportChartData('prequentialAccuracy'));
     }
 
     async loadData() {
         try {
-            const response = await chrome.runtime.sendMessage({ action: 'getVisualizationData' });
+            // Request all needed metrics for dashboard
+            const response = await chrome.runtime.sendMessage({ action: 'getStats' });
             if (response.error) {
                 throw new Error(response.error);
             }
-            this.data = response;
+            // Merge in recentPredictions, mlStats, performanceMetrics, etc.
+            this.data = {
+                ...response,
+                predictions: response.recentPredictions || [],
+                mlStats: response.mlStats || {},
+                performanceMetrics: response.performanceMetrics || {},
+                sessionStats: response.sessionStats || {},
+            };
             return this.data;
         } catch (error) {
             console.error('Data loading error:', error);
@@ -120,10 +133,14 @@ class StatsController {
         }
     }
 
-    initializeCharts() {
+    async initializeCharts() {
         if (!this.data) return;
-
         try {
+            this.createInferenceLatencyChart();
+            this.createThroughputChart();
+            this.createMemoryUtilizationChart();
+            this.createFeatureHistograms();
+            this.createPrequentialAccuracyChart();
             this.createClassificationChart();
             this.createConfidenceChart();
             this.createActivityChart();
@@ -136,6 +153,95 @@ class StatsController {
             console.error('Chart initialization error:', error);
             this.showError('Failed to initialize charts');
         }
+    }
+
+    createInferenceLatencyChart() {
+        const ctx = document.getElementById('inferenceLatencyChart')?.getContext('2d');
+        if (!ctx || !this.data || !this.data.performanceMetrics) return;
+        const timings = this.data.performanceMetrics.classificationTiming || [];
+        const labels = timings.map(t => new Date(t.timestamp).toLocaleTimeString());
+        const data = timings.map(t => t.classificationTime);
+        this.charts.inferenceLatency = new Chart(ctx, {
+            type: 'line',
+            data: { labels, datasets: [{ label: 'Latency (ms)', data, borderColor: '#3182ce', fill: false }] },
+            options: { responsive: true, plugins: { title: { display: true, text: 'Inference Latency (ms)' } } }
+        });
+    }
+
+    createThroughputChart() {
+        const ctx = document.getElementById('throughputChart')?.getContext('2d');
+        if (!ctx || !this.data || !this.data.performanceMetrics) return;
+        const throughput = this.data.performanceMetrics.predictionThroughput || [];
+        const labels = throughput.map(t => new Date(t.timestamp).toLocaleTimeString());
+        const data = throughput.map(t => t.predictionsPerHour);
+        this.charts.throughput = new Chart(ctx, {
+            type: 'bar',
+            data: { labels, datasets: [{ label: 'Predictions/Hour', data, backgroundColor: '#805ad5' }] },
+            options: { responsive: true, plugins: { title: { display: true, text: 'Prediction Throughput' } } }
+        });
+    }
+
+    createMemoryUtilizationChart() {
+        const ctx = document.getElementById('memoryUtilizationChart')?.getContext('2d');
+        if (!ctx || !this.data || !this.data.performanceMetrics) return;
+        const memory = this.data.performanceMetrics.memoryUsage || [];
+        const labels = memory.map(m => new Date(m.timestamp).toLocaleTimeString());
+        const mb = memory.map(m => m.estimated / (1024 * 1024));
+        const percent = memory.map(m => m.percentage);
+        this.charts.memoryUtilization = new Chart(ctx, {
+            type: 'line',
+            data: { labels, datasets: [
+                { label: 'Heap Size (MB)', data: mb, borderColor: '#38a169', fill: false },
+                { label: '% of 5MB', data: percent, borderColor: '#e53e3e', fill: false }
+            ] },
+            options: { responsive: true, plugins: { title: { display: true, text: 'Memory Utilization' } } }
+        });
+    }
+
+    createFeatureHistograms() {
+        // Session Duration Normalization
+        const ctx1 = document.getElementById('featureHistogram1')?.getContext('2d');
+        const ctx2 = document.getElementById('featureHistogram2')?.getContext('2d');
+        const ctx3 = document.getElementById('featureHistogram3')?.getContext('2d');
+        if (!ctx1 || !ctx2 || !ctx3 || !this.data || !this.data.performanceMetrics) return;
+        const sdn = (this.data.performanceMetrics.sessionDurationNormalizations || []).map(x => x.value);
+        const tsv = (this.data.performanceMetrics.tabSwitchingVelocities || []).map(x => x.value);
+        const dd = (this.data.performanceMetrics.domainDiversityScores || []).map(x => x.value);
+        this.charts.featureHistogram1 = new Chart(ctx1, { type: 'bar', data: { labels: this.makeBins(sdn), datasets: [{ label: 'Session Duration Norm.', data: this.makeHistogram(sdn), backgroundColor: '#3182ce' }] }, options: { plugins: { title: { display: true, text: 'Session Duration Normalization' } } } });
+        this.charts.featureHistogram2 = new Chart(ctx2, { type: 'bar', data: { labels: this.makeBins(tsv), datasets: [{ label: 'Tab Switch Velocity', data: this.makeHistogram(tsv), backgroundColor: '#805ad5' }] }, options: { plugins: { title: { display: true, text: 'Tab Switch Velocity' } } } });
+        this.charts.featureHistogram3 = new Chart(ctx3, { type: 'bar', data: { labels: this.makeBins(dd), datasets: [{ label: 'Domain Diversity', data: this.makeHistogram(dd), backgroundColor: '#38a169' }] }, options: { plugins: { title: { display: true, text: 'Domain Diversity' } } } });
+    }
+
+    makeHistogram(arr, bins = 10) {
+        if (!arr.length) return Array(bins).fill(0);
+        const min = Math.min(...arr), max = Math.max(...arr);
+        const step = (max - min) / bins || 1;
+        const hist = Array(bins).fill(0);
+        arr.forEach(v => {
+            const idx = Math.min(bins - 1, Math.floor((v - min) / step));
+            hist[idx]++;
+        });
+        return hist;
+    }
+    makeBins(arr, bins = 10) {
+        if (!arr.length) return Array(bins).fill('');
+        const min = Math.min(...arr), max = Math.max(...arr);
+        const step = (max - min) / bins || 1;
+        return Array(bins).fill(0).map((_, i) => (min + i * step).toFixed(2));
+    }
+
+    createPrequentialAccuracyChart() {
+        const ctx = document.getElementById('prequentialAccuracyChart')?.getContext('2d');
+        if (!ctx || !this.data || !this.data.mlStats) return;
+        const acc = this.data.mlStats.performanceMetrics?.accuracyHistory || [];
+        const window = 50;
+        const rolling = acc.map((_, i, arr) => i < window ? null : (arr.slice(i - window, i).reduce((a, b) => a + b, 0) / window) * 100);
+        const labels = rolling.map((_, i) => `${i + 1}`);
+        this.charts.prequentialAccuracy = new Chart(ctx, {
+            type: 'line',
+            data: { labels, datasets: [{ label: 'Rolling Accuracy (%)', data: rolling, borderColor: '#ed8936', fill: false }] },
+            options: { responsive: true, plugins: { title: { display: true, text: 'Prequential Accuracy (Window=50)' } } }
+        });
     }
 
     createClassificationChart() {
@@ -889,6 +995,47 @@ class StatsController {
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
+    }
+
+    exportChartData(chartName) {
+        let data;
+        switch (chartName) {
+            case 'inferenceLatency':
+                data = this.data.performanceMetrics?.classificationTiming || [];
+                break;
+            case 'throughput':
+                data = this.data.performanceMetrics?.predictionThroughput || [];
+                break;
+            case 'memoryUtilization':
+                data = this.data.performanceMetrics?.memoryUsage || [];
+                break;
+            case 'featureHistograms':
+                data = {
+                    sessionDurationNorm: this.data.performanceMetrics?.sessionDurationNormalizations || [],
+                    tabSwitchingVelocity: this.data.performanceMetrics?.tabSwitchingVelocities || [],
+                    domainDiversity: this.data.performanceMetrics?.domainDiversityScores || []
+                };
+                break;
+            case 'prequentialAccuracy':
+                data = this.data.mlStats?.performanceMetrics?.accuracyHistory || [];
+                break;
+            default:
+                data = null;
+        }
+        if (!data) {
+            this.showToast('No data to export', 'warning');
+            return;
+        }
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `checkmate_${chartName}_${new Date().toISOString().split('T')[0]}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        this.showToast('Exported ' + chartName + ' data', 'success');
     }
 
     // Error Handling

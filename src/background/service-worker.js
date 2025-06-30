@@ -167,7 +167,8 @@ class OveruseDetectionService {
             if (this.settings.enabled && !this.isPaused) {
                 this.startMonitoring();
             }
-
+            // Start feedback notification during bootstrap
+            this.startBootstrapFeedbackNotification();
             this.isInitialized = true;
             console.log('✅ Overuse Detection Service initialized successfully');
         } catch (error) {
@@ -269,6 +270,59 @@ class OveruseDetectionService {
         this.performanceMetrics.eventCaptureStats.lastFocusedWindow = windowId;
         // You can add more logic here if needed
         // console.log('Window focus changed:', windowId);
+    }
+
+    // Handle Chrome idle state changes (simple implementation)
+    handleIdleStateChanged(state) {
+        // Log the state and update metrics
+        console.log('[IdleStateChanged]', state);
+        this.performanceMetrics.eventCaptureStats.lastIdleState = state;
+        // Optionally, pause/resume monitoring based on idle/active
+        if (state === 'idle' || state === 'locked') {
+            this.pauseTracking();
+        } else if (state === 'active') {
+            this.resumeTracking();
+        }
+    }
+
+    // --- Hoeffding Tree Bootstrap Feedback Notification ---
+    // Show a browser notification every 15 minutes during bootstrap
+    startBootstrapFeedbackNotification() {
+        if (this._bootstrapFeedbackInterval) return;
+        this._bootstrapFeedbackInterval = setInterval(() => {
+            if (
+                this.hoeffdingTree &&
+                this.hoeffdingTree.instancesSeen < this.hoeffdingTree.gracePeriod
+            ) {
+                this.showBootstrapFeedbackNotification();
+            }
+        }, 15 * 60 * 1000); // 15 minutes
+    }
+
+    stopBootstrapFeedbackNotification() {
+        if (this._bootstrapFeedbackInterval) {
+            clearInterval(this._bootstrapFeedbackInterval);
+            this._bootstrapFeedbackInterval = null;
+        }
+    }
+
+    showBootstrapFeedbackNotification() {
+        chrome.notifications.create({
+            type: 'basic',
+            iconUrl: chrome.runtime.getURL('assets/icons/icon128.png'),
+            title: 'Help Train the AI (Bootstrap Mode)',
+            message: 'Please provide feedback to help train the AI. Click here to open the feedback form.',
+            priority: 2
+        }, (notificationId) => {
+            // Optionally, add a click handler to open the popup or feedback page
+            chrome.notifications.onClicked.addListener(function handler(id) {
+                if (id === notificationId) {
+                    chrome.runtime.openOptionsPage(); // Or open the popup/feedback page
+                    chrome.notifications.clear(notificationId);
+                    chrome.notifications.onClicked.removeListener(handler);
+                }
+            });
+        });
     }
 
     /**
@@ -449,6 +503,18 @@ class OveruseDetectionService {
                 case 'testNotification':
                     await this.showTestNotification();
                     sendResponse({ success: true });
+                    break;
+                    
+                case 'getTreeStructure':
+                    // Return the latest tree structure for visualization
+                    if (this.hoeffdingTree) {
+                        sendResponse({
+                            treeStructure: this.hoeffdingTree.exportTreeStructure(),
+                            instancesSeen: this.hoeffdingTree.instancesSeen
+                        });
+                    } else {
+                        sendResponse({ treeStructure: null });
+                    }
                     break;
                     
                 default:
@@ -723,7 +789,6 @@ class OveruseDetectionService {
                 lastNotification: this.lastNotificationTime,
                 uptime: Date.now() - (this.startTime || Date.now()),
                 feedbackCount: this.userFeedbackQueue.length,
-                
                 // ADDED: Include performance metrics in standard stats
                 performanceMetrics: {
                     totalPredictions: this.performanceMetrics.totalPredictions,
@@ -731,16 +796,31 @@ class OveruseDetectionService {
                     averageInferenceInterval: this.calculateMean(
                         this.performanceMetrics.inferenceIntervals.map(i => i.interval)
                     ),
-                    eventCaptureStats: this.performanceMetrics.eventCaptureStats
-                }
+                    eventCaptureStats: this.performanceMetrics.eventCaptureStats,
+                    // --- FULL ARRAYS FOR DASHBOARD VISUALIZATIONS ---
+                    classificationTiming: this.performanceMetrics.classificationTiming,
+                    predictionThroughput: this.performanceMetrics.predictionThroughput,
+                    memoryUsage: this.performanceMetrics.memoryUsage,
+                    sessionDurationNormalizations: this.performanceMetrics.sessionDurationNormalizations,
+                    tabSwitchingVelocities: this.performanceMetrics.tabSwitchingVelocities,
+                    domainDiversityScores: this.performanceMetrics.domainDiversityScores,
+                    featureExtractionTimes: this.performanceMetrics.featureExtractionTimes,
+                    reportingTimes: this.performanceMetrics.reportingTimes,
+                    messagingLatency: this.performanceMetrics.messagingLatency,
+                    accuracyHistory: this.hoeffdingTree ? this.hoeffdingTree.performanceMetrics.accuracyHistory : [],
+                    driftDetections: this.hoeffdingTree ? this.hoeffdingTree.performanceMetrics.driftDetections : [],
+                    feedbackAdaptations: this.performanceMetrics.feedbackAdaptations,
+                },
+                // --- PREDICTION HISTORY FOR USAGE CLASSIFICATION OVER TIME ---
+                predictionHistory: this.predictionHistory || [],
+                // --- FEEDBACK HISTORY/IMPACT ---
+                feedbackHistory: this.performanceMetrics.feedbackAdaptations || [],
             };
 
             // Get recent predictions
             const recentPredictions = await this.getRecentPredictions();
             stats.recentPredictions = recentPredictions.slice(-10);
-            
             return stats;
-
         } catch (error) {
             console.error('Stats error:', error);
             return { error: error.message };

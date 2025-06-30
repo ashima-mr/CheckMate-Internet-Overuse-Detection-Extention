@@ -142,6 +142,57 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- Research Visualizations -->
+                <div class="overview-grid">
+                    <div class="chart-section">
+                        <div class="chart-header">
+                            <h3>Inference Latency Over Time</h3>
+                            <button id="exportInferenceLatency" class="btn-small">📤 Export</button>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="inferenceLatencyChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="chart-section">
+                        <div class="chart-header">
+                            <h3>Prediction Throughput</h3>
+                            <button id="exportThroughput" class="btn-small">📤 Export</button>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="throughputChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="chart-section">
+                        <div class="chart-header">
+                            <h3>Memory Utilization Timeline</h3>
+                            <button id="exportMemoryUtilization" class="btn-small">📤 Export</button>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="memoryUtilizationChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="chart-section">
+                        <div class="chart-header">
+                            <h3>Feature Distribution Histograms</h3>
+                            <button id="exportFeatureHistograms" class="btn-small">📤 Export</button>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="featureHistogram1"></canvas>
+                            <canvas id="featureHistogram2"></canvas>
+                            <canvas id="featureHistogram3"></canvas>
+                        </div>
+                    </div>
+                    <div class="chart-section">
+                        <div class="chart-header">
+                            <h3>Prequential Accuracy Curve</h3>
+                            <button id="exportAccuracyCurve" class="btn-small">📤 Export</button>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="prequentialAccuracyChart"></canvas>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <!-- Tree Visualization Tab -->
@@ -346,7 +397,8 @@
     <!-- D3.js for tree visualization -->
     <script src="lib/d3.min.js"></script>
     <script src="lib/dagre-d3.min.js"></script>
-    <!-- Main Dashboard Script -->
+    <!-- Ensure D3 is loaded before stats.js -->
+    <script src="../popup/lib/d3.v7.min.js"></script>
     <script src="stats.js"></script>
 </body>
 </html>

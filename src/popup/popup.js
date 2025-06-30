@@ -200,6 +200,11 @@ class PopupController {
                 });
             }
         });
+
+        const exportMetricsBtn = document.getElementById('exportMetricsBtn');
+        if (exportMetricsBtn) {
+            exportMetricsBtn.addEventListener('click', () => this.handleExportMetrics());
+        }
     }
 
     /**
@@ -208,7 +213,6 @@ class PopupController {
      */
     async updateStats() {
         const updateStartTime = performance.now();
-        
         try {
             const stats = await chrome.runtime.sendMessage({ action: 'getStats' });
             if (stats && !stats.error) {
@@ -246,7 +250,15 @@ class PopupController {
                     totalUpdate: performance.now() - updateStartTime
                 });
                 
-                if (stats.needsFeedback) this.showFeedbackSection();
+                // ADDED: Render recent predictions in the popup
+                this.renderRecentPredictions(stats.recentPredictions || []);
+                // Show feedback prompt if in bootstrap (grace period not reached)
+                if (stats.mlStats && stats.mlStats.instancesSeen < (stats.mlStats.gracePeriod || 200)) {
+                    this.showFeedbackSection(true);
+                    this.showLog('Please provide feedback to help train the AI (bootstrap mode).');
+                } else {
+                    this.showFeedbackSection(false);
+                }
             }
 
             // ADDED: Record total update time
@@ -261,9 +273,32 @@ class PopupController {
             this.uiMetrics.displayUpdates.averageUpdateTime = this.calculateMean(updateTimes);
 
         } catch (error) {
-            console.warn('Stats update error:', error);
             this.showConnectionError();
+            this.showLog('Stats update error: ' + (error && error.message ? error.message : error));
         }
+    }
+
+    renderRecentPredictions(predictions) {
+        const container = document.getElementById('recentPredictionsList');
+        if (!container) return;
+        container.innerHTML = '';
+        if (!predictions.length) {
+            container.innerHTML = '<div class="no-predictions">No predictions yet.</div>';
+            return;
+        }
+        const classLabels = ['Productive', 'Non-Productive', 'Overuse'];
+        const classColors = ['#48bb78', '#ed8936', '#e53e3e'];
+        predictions.slice(-10).reverse().forEach(pred => {
+            const div = document.createElement('div');
+            div.className = 'recent-prediction-row';
+            div.style = `display:flex;align-items:center;gap:8px;margin-bottom:4px;`;
+            div.innerHTML = `
+                <span style="font-weight:bold;color:${classColors[pred.prediction]}">${classLabels[pred.prediction] || 'Unknown'}</span>
+                <span style="opacity:0.7;">${Math.round((pred.confidence || 0) * 100)}%</span>
+                <span style="font-size:0.9em;color:#888;">${new Date(pred.timestamp).toLocaleTimeString()}</span>
+            `;
+            container.appendChild(div);
+        });
     }
 
     /**
@@ -494,19 +529,30 @@ class PopupController {
         }
     }
 
-    showFeedbackSection() {
-        const sec = document.getElementById('feedbackSection');
+    showFeedbackSection(isPrompt = false) {
+        const sec = document.getElementById('sessionFeedbackSection');
+        const banner = document.getElementById('feedbackPromptBanner');
         if (sec) {
             sec.style.display = 'block';
             sec.classList.add('fade-in');
         }
+        if (banner) {
+            banner.style.display = isPrompt ? 'block' : 'none';
+        }
     }
 
     hideFeedbackSection() {
-        const sec = document.getElementById('feedbackSection');
-        if (sec) {
-            sec.style.display = 'none';
+        // Feedback section is always visible now, so do nothing
+    }
+
+    showLog(message) {
+        const logArea = document.getElementById('popupLogArea');
+        if (logArea) {
+            logArea.style.display = 'block';
+            logArea.textContent = message;
+            setTimeout(() => { logArea.style.display = 'none'; }, 5000);
         }
+        console.warn(message);
     }
 
     /** Submit the chosen ML class label as feedback - FIXED METHOD NAME */
@@ -599,6 +645,28 @@ class PopupController {
             a.remove();
             URL.revokeObjectURL(url);
         });
+    }
+
+    async handleExportMetrics() {
+        try {
+            const metrics = await chrome.runtime.sendMessage({ action: 'getResearchMetrics' });
+            if (metrics && !metrics.error) {
+                const blob = new Blob([JSON.stringify(metrics, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'checkmate_research_metrics.json';
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                URL.revokeObjectURL(url);
+                this.showLog('Research metrics exported successfully.');
+            } else {
+                this.showLog('Failed to export metrics: ' + (metrics && metrics.error ? metrics.error : 'Unknown error'));
+            }
+        } catch (error) {
+            this.showLog('Export metrics error: ' + (error && error.message ? error.message : error));
+        }
     }
 
     calculateActivityLevel(sessionStats) {
