@@ -14,6 +14,7 @@ class PageActivityMonitor {
         this.isPageVisible = !document.hidden;
         this.activityBuffer = [];
         this.reportingInterval = 30000; // 30 seconds
+        this.reportingTimer = null;
 
         // ADDED: Comprehensive browser integration metrics
         this.browserMetrics = {
@@ -539,6 +540,43 @@ class PageActivityMonitor {
             // ADDED: Include browser integration metrics
             browserMetrics: this.getBrowserMetrics()
         };
+    }
+
+    startReporting() {
+        if (this.reportingTimer) {
+            clearInterval(this.reportingTimer);
+        }
+        this.reportingTimer = setInterval(() => {
+            this.reportPeriodicStats();
+        }, this.reportingInterval);
+        // Also report once immediately
+        this.reportPeriodicStats();
+        // Clear interval on unload
+        window.addEventListener('beforeunload', () => {
+            if (this.reportingTimer) {
+                clearInterval(this.reportingTimer);
+                this.reportingTimer = null;
+            }
+        });
+    }
+
+    /**
+     * Record a user activity event for metrics and reporting.
+     * @param {string} type - The type of activity (e.g., 'scroll', 'click', etc.)
+     * @param {object} [details] - Optional details about the activity.
+     */
+    recordActivity(type, details = {}) {
+        const activity = {
+            type,
+            timestamp: Date.now(),
+            ...details
+        };
+        this.activityBuffer.push(activity);
+        this.lastActivityTime = activity.timestamp;
+        // Optionally, keep buffer size manageable
+        if (this.activityBuffer.length > 500) {
+            this.activityBuffer.shift();
+        }
     }
 }
 

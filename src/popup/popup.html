@@ -5,13 +5,30 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CheckMate - Internet Usage Monitor</title>
     <link rel="stylesheet" href="popup.css">
+    <style>
+        html, body, .container {
+            min-width: 340px;
+            max-width: 420px;
+            min-height: 480px;
+            max-height: 650px;
+            width: 100vw;
+            height: 100vh;
+            box-sizing: border-box;
+        }
+        body, .container {
+            display: flex;
+            flex-direction: column;
+            flex: 1 1 auto;
+        }
+        .main-content { flex: 1 1 auto; display: flex; flex-direction: column; }
+    </style>
 </head>
 <body>
     <div class="container">
         <!-- Header -->
         <div class="header">
             <div class="logo">
-                <div class="logo-icon">🛡️</div>
+                <div class="logo-icon">🔍</div>
                 <h1 class="title">CheckMate</h1>
             </div>
             <div class="status-indicators">
@@ -19,7 +36,8 @@
                     <span class="status-dot active"></span>
                     <span class="status-text">Active</span>
                 </div>
-        </header>
+            </div>
+        </div>
 
         <!-- Main Content -->
         <div class="main-content">
@@ -135,6 +153,8 @@
                     Last update: <span id="lastUpdate">--</span>
                 </div>
             </footer>
+        </div>
+    </div>
     
     <script src="lib/chart.umd.min.js"></script>    
     <script type="module" src="feedback-manager.js"></script>

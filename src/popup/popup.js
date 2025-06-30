@@ -470,7 +470,7 @@ class PopupController {
         }
         
         if (usageLabel) {
-            usageLabel.textContent = `Real-Time Usage Health Indicator: ${label}`;
+            usageLabel.textContent = `Real-Time Usage Health Indicator`;
         }
     }
 
@@ -618,6 +618,29 @@ class PopupController {
         if (sensitivitySlider) sensitivitySlider.value = settings.sensitivity || 0.5;
     }
 
+    async loadCurrentSettings() {
+        return new Promise((resolve) => {
+            chrome.storage.local.get([
+                'enabled',
+                'sensitivity',
+                'notificationsEnabled',
+                'monitoringInterval',
+                'privacyMode',
+                'dataRetentionDays'
+            ], (result) => {
+                this.updateUIFromSettings({
+                    enabled: result.enabled ?? true,
+                    sensitivity: result.sensitivity ?? 0.5,
+                    notificationsEnabled: result.notificationsEnabled ?? true,
+                    monitoringInterval: result.monitoringInterval ?? 15000,
+                    privacyMode: result.privacyMode ?? false,
+                    dataRetentionDays: result.dataRetentionDays ?? 30
+                });
+                resolve();
+            });
+        });
+    }
+
     updateLastUpdate() {
         const lastUpdate = document.getElementById('lastUpdate');
         if (lastUpdate) {
@@ -679,6 +702,26 @@ class PopupController {
                 statusText.textContent = 'Connection Error';
             }
             ind.className = 'status-indicator status-error';
+        }
+   }
+
+    // Periodic UI update for popup
+    startPeriodicUpdates() {
+        if (this.updateInterval) {
+            clearInterval(this.updateInterval);
+        }
+        // Update every 5 seconds (or as needed)
+        this.updateInterval = setInterval(() => {
+            this.updateStats();
+        }, 5000);
+        // Run one update immediately
+        this.updateStats();
+    }
+
+    stopPeriodicUpdates() {
+        if (this.updateInterval) {
+            clearInterval(this.updateInterval);
+            this.updateInterval = null;
         }
     }
 }

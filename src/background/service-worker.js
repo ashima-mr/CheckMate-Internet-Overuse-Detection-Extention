@@ -240,6 +240,37 @@ class OveruseDetectionService {
         });
     }
 
+    // Periodic ML monitoring for background service
+    startMonitoring() {
+        if (this.monitoringInterval) {
+            clearInterval(this.monitoringInterval);
+        }
+        // Use the interval from settings, default to 15s
+        const interval = this.settings.monitoringInterval || 15000;
+        this.monitoringInterval = setInterval(() => {
+            if (!this.isPaused) {
+                this.processMLPrediction();
+            }
+        }, interval);
+        // Run one prediction immediately
+        this.processMLPrediction();
+    }
+
+    stopMonitoring() {
+        if (this.monitoringInterval) {
+            clearInterval(this.monitoringInterval);
+            this.monitoringInterval = null;
+        }
+    }
+
+    // Handle window focus changes (metrics or logic as needed)
+    handleWindowFocusChanged(windowId) {
+        // Example: log or update metrics
+        this.performanceMetrics.eventCaptureStats.lastFocusedWindow = windowId;
+        // You can add more logic here if needed
+        // console.log('Window focus changed:', windowId);
+    }
+
     /**
      * Enhanced ML prediction processing with comprehensive metrics
      * MODIFIED: Added detailed performance and accuracy tracking
@@ -652,7 +683,29 @@ class OveruseDetectionService {
         }
     }
 
-    // ... [Rest of the existing methods remain the same, but with added metrics collection throughout]
+    /**
+     * Return the most recent predictions (default: last 100)
+     */
+    async getRecentPredictions(limit = 100) {
+        // If predictionHistory is an array of predictions with timestamps
+        if (!Array.isArray(this.predictionHistory)) return [];
+        // Return the last N predictions, most recent last
+        return this.predictionHistory.slice(-limit);
+    }
+
+    /**
+     * Return data for popup/dashboard visualizations
+     */
+    async getVisualizationData() {
+        // Example: return recent predictions and session stats
+        const recentPredictions = await this.getRecentPredictions(100);
+        const sessionStats = this.featureEngineer ? this.featureEngineer.getSessionStats() : null;
+        return {
+            recentPredictions,
+            sessionStats,
+            // Add more fields as needed for your visualizations
+        };
+    }
 
     /**
      * Enhanced system statistics with research metrics
@@ -694,7 +747,71 @@ class OveruseDetectionService {
         }
     }
 
-    // ... [Continue with remaining methods, adding metrics collection where relevant]
+    // Handle tab activation event
+    handleTabActivated(activeInfo) {
+        // Example: log or update metrics, or process event
+        // You can expand this logic as needed
+        // console.log('Tab activated:', activeInfo);
+    }
+
+    // Handle tab update event
+    handleTabUpdated(tabId, changeInfo, tab) {
+        // Example: log or update metrics, or process event
+        // console.log('Tab updated:', tabId, changeInfo, tab);
+    }
+
+    // Pause tracking (set isPaused and stop monitoring)
+    pauseTracking() {
+        this.isPaused = true;
+        this.stopMonitoring && this.stopMonitoring();
+    }
+
+    // Resume tracking (unset isPaused and start monitoring)
+    resumeTracking() {
+        this.isPaused = false;
+        this.startMonitoring && this.startMonitoring();
+    }
+
+    // Delete all data (clear relevant storage and in-memory data)
+    async deleteAllData() {
+        // Clear local storage
+        await new Promise(resolve => chrome.storage.local.clear(resolve));
+        // Reset in-memory data
+        this.predictionHistory = [];
+        this.userFeedbackQueue = [];
+        if (this.featureEngineer) {
+            this.featureEngineer.currentSession = {
+                startTime: Date.now(),
+                tabSwitches: 0,
+                focusTime: 0,
+                websiteCategories: new Map(),
+                domains: new Set(),
+                lastActivityTime: Date.now(),
+                scrollEvents: 0,
+                clickEvents: 0,
+                keystrokeEvents: 0,
+                pageViews: 0,
+                totalActiveTime: 0
+            };
+        }
+    }
+
+    /**
+     * Store prediction result in predictionHistory and optionally persist.
+     * @param {Object} predictionData
+     */
+    async storePredictionResult(predictionData) {
+        if (!this.predictionHistory) this.predictionHistory = [];
+        this.predictionHistory.push(predictionData);
+        // Optionally, persist to chrome.storage.local for durability
+        try {
+            await new Promise(resolve => {
+                chrome.storage.local.set({ predictionHistory: this.predictionHistory }, resolve);
+            });
+        } catch (e) {
+            console.warn('Failed to persist predictionHistory:', e);
+        }
+    }
 }
 
 // Initialize service with metrics collection
