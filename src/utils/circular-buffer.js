@@ -25,7 +25,7 @@ class CircularBuffer {
         if (index >= this.length) return undefined;
         return this.buffer[(this.tail + index) % this.maxSize];
     }
-
+    // Returns all elements in the buffer as a standard array, in order from oldest to newest.
     toArray() {
         const result = [];
         for (let i = 0; i < this.length; i++) {

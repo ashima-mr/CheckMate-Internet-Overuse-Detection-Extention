@@ -1,59 +1,41 @@
-/**
- * Content Script for Internet Overuse Detection
- * MODIFIED: Added comprehensive browser integration metrics collection
- */
-
 class PageActivityMonitor {
-    constructor() {
-        this.startTime = Date.now();
-        this.lastActivityTime = Date.now();
-        this.scrollCount = 0;
-        this.clickCount = 0;
-        this.keystrokes = 0;
-        this.focusTime = 0;
-        this.isPageVisible = !document.hidden;
-        this.activityBuffer = [];
-        this.reportingInterval = 30000; // 30 seconds
-        this.reportingTimer = null;
+  constructor() {
+    this.startTime = Date.now();              // When the page session started
+    this.lastActivityTime = Date.now();       // Last time user interacted with the page
+    this.scrollCount = 0;                     // Number of scroll events
+    this.clickCount = 0;                      // Number of click events
+    this.keystrokes = 0;                      // Number of keydown events
+    this.mousemoveCount = 0;                  
+    this.activityBuffer = [];                 // Buffer for recent activity events
+    this.reportingInterval = 30000;           // How often to report stats (30s)
+    this.reportingTimer = null;               // Reference to reporting interval
 
-        // ADDED: Comprehensive browser integration metrics
-        this.browserMetrics = {
-            // Event capture tracking for research validation
-            eventCapture: {
-                scrollEvents: 0,
-                clickEvents: 0,
-                keyEvents: 0,
-                focusEvents: 0,
-                visibilityEvents: 0,
-                mouseMoveEvents: 0
-            },
-            
-            // Performance tracking
-            performance: {
-                eventProcessingTimes: [],
-                reportingTimes: [],
-                messagingLatency: []
-            },
-            
-            // User interaction patterns
-            interactionPatterns: {
-                scrollSpeeds: [],
-                clickPositions: [],
-                keyboardActivity: [],
-                mouseMovements: []
-            },
-            
-            // Page engagement metrics
-            engagement: {
-                timeSpentVisible: 0,
-                timeSpentHidden: 0,
-                lastVisibilityChange: Date.now(),
-                interactionFrequency: []
-            }
-        };
+    // Metrics for research and system evaluation
+    this.browserMetrics = {
+      eventCapture: {                         // Counts for each event type
+        scrollEvents: 0,
+        clickEvents: 0,
+        keyEvents: 0,
+        mouseMoveEvents: 0
+      },
+      performance: {                          // Timing and latency metrics
+        eventProcessingTimes: [],
+        reportingTimes: [],
+        messagingLatency: []
+      },
+      interactionPatterns: {                  // Patterns for advanced analysis
+        scrollSpeeds: [],
+        clickPositions: [],
+        keyboardActivity: [],
+        mouseMovements: []
+      },
+      engagement: {          
+        interactionFrequency: []
+      }
+    };
 
-        this.init();
-    }
+    this.init();                              // Set up event listeners and reporting
+  }
 
     init() {
         this.setupEventListeners();
@@ -61,305 +43,312 @@ class PageActivityMonitor {
         console.log('📊 Page Activity Monitor initialized on:', window.location.hostname);
     }
 
-    /**
-     * Enhanced event listeners with comprehensive metrics collection
-     * MODIFIED: Added detailed event capture and performance tracking
-     */
     setupEventListeners() {
-        // ADDED: Scroll tracking with enhanced metrics
-        let scrollTimeout;
-        window.addEventListener('scroll', (event) => {
-            const eventStartTime = performance.now();
-            
-            this.scrollCount++;
-            this.browserMetrics.eventCapture.scrollEvents++;
-            
-            this.recordActivity('scroll', {
-                scrollY: window.scrollY,
-                timestamp: Date.now()
-            });
-            
-            clearTimeout(scrollTimeout);
-            scrollTimeout = setTimeout(() => {
-                this.reportScrollBehavior();
-            }, 1000);
 
-            // ADDED: Track event processing time
-            const processingTime = performance.now() - eventStartTime;
-            this.browserMetrics.performance.eventProcessingTimes.push({
-                type: 'scroll',
-                time: processingTime,
+        if (!window.name) {
+            window.name = crypto.randomUUID();
+        }
+
+        // Send visibility state changes to service worker
+        document.addEventListener('visibilitychange', () => {
+            navigator.serviceWorker.controller?.postMessage({
+                type: 'VISIBILITY_CHANGE',
+                tabID: window.name || null, // or generate a unique ID per tab if needed
+                visibilityState: document.visibilityState,
                 timestamp: Date.now()
             });
-            
+        });
+
+        this.prevScrollY = window.scrollY;
+        this.prevScrollTimestamp = Date.now();
+
+        let lastscrollRunTime = 0;             // Track last time handler ran
+        const scrollthrottleDelay = 150;      // 150ms throttle delay
+
+        window.addEventListener('scroll', (event) => {
+            const now = Date.now();
+
+            if (now - lastscrollRunTime >= scrollthrottleDelay) {
+                lastscrollRunTime = now;
+
+                const eventStartTime = performance.now();
+
+                const currentScrollY = window.scrollY;
+                const currentTimestamp = now;
+
+                const deltaY = currentScrollY - this.prevScrollY;
+                const deltaTime = (currentTimestamp - this.prevScrollTimestamp) / 1000; // seconds
+                const scrollSpeed = deltaTime > 0 ? deltaY / deltaTime : 0;
+
+                this.scrollCount++;
+                this.browserMetrics.eventCapture.scrollEvents++;
+
+                const scrollData = {
+                    scrollY: currentScrollY,
+                    timestamp: currentTimestamp,
+                    speed: scrollSpeed
+                };
+
+                this.browserMetrics.interactionPatterns.scrollSpeeds.push(scrollData);
+                this.recordActivity('scroll', scrollData);
+
+                this.prevScrollY = currentScrollY;
+                this.prevScrollTimestamp = currentTimestamp;
+
+                const processingTime = performance.now() - eventStartTime;
+                this.browserMetrics.performance.eventProcessingTimes.push({
+                    type: 'scroll',
+                    time: processingTime,
+                    timestamp: Date.now()
+                });
+
+                if (navigator.serviceWorker.controller) {
+                    navigator.serviceWorker.controller.postMessage({
+                        type: 'INTERACTION_EVENT',
+                        tabID: window.name || null,
+                        eventType: 'scroll',
+                        timestamp: currentTimestamp,
+                        details: {
+                            scrollY: currentScrollY,
+                            speed: scrollSpeed
+                        }
+                    });
+                }
+            }
         }, { passive: true });
 
-        // ADDED: Enhanced click tracking with position metrics
+        // click tracking with position metrics
         document.addEventListener('click', (event) => {
             const eventStartTime = performance.now();
             
             this.clickCount++;
             this.browserMetrics.eventCapture.clickEvents++;
             
-            // ADDED: Track click positions for interaction pattern analysis
-            this.browserMetrics.interactionPatterns.clickPositions.push({
+            const clickData = {
                 x: event.clientX,
                 y: event.clientY,
                 element: event.target.tagName,
                 timestamp: Date.now()
-            });
-            
-            this.recordActivity('click', {
-                element: event.target.tagName,
-                x: event.clientX,
-                y: event.clientY,
-                timestamp: Date.now()
-            });
+            }
+            this.browserMetrics.interactionPatterns.clickPositions.push({clickData});
+            this.recordActivity('click', {clickData});
 
-            // ADDED: Track event processing time
             const processingTime = performance.now() - eventStartTime;
             this.browserMetrics.performance.eventProcessingTimes.push({
                 type: 'click',
                 time: processingTime,
                 timestamp: Date.now()
             });
+
+            if (navigator.serviceWorker.controller) {
+            navigator.serviceWorker.controller.postMessage({
+                type: 'INTERACTION_EVENT',
+                tabID: window.name || null,
+                eventType: 'click',
+                timestamp: currentTimestamp,
+                details: {
+                    x: event.clientX,
+                    y: event.clientY,
+                    element: event.target.tagName
+                }
+            });
+        }
             
         }, { passive: true });
 
-        // ADDED: Enhanced keyboard tracking with timing patterns
         document.addEventListener('keydown', (event) => {
             const eventStartTime = performance.now();
             
             this.keystrokes++;
             this.browserMetrics.eventCapture.keyEvents++;
             
-            // ADDED: Track keyboard activity patterns (no content, just timing)
-            this.browserMetrics.interactionPatterns.keyboardActivity.push({
+            const keyboardData = {
                 timestamp: Date.now(),
-                keyCode: event.keyCode,
-                isModifier: event.ctrlKey || event.altKey || event.shiftKey
-            });
-            
-            this.recordActivity('keydown');
+                code: event.code
+            };
 
-            // ADDED: Track event processing time
+            this.browserMetrics.interactionPatterns.keyboardActivity.push(keyboardData);
+            this.recordActivity('keydown', keyboardData);
+
             const processingTime = performance.now() - eventStartTime;
             this.browserMetrics.performance.eventProcessingTimes.push({
                 type: 'keydown',
                 time: processingTime,
                 timestamp: Date.now()
             });
-            
+
+            if (navigator.serviceWorker.controller) {
+                navigator.serviceWorker.controller.postMessage({
+                    type: 'INTERACTION_EVENT',
+                    tabID: window.name || null,
+                    eventType: 'keydown',
+                    timestamp: currentTimestamp,
+                    details: {
+                        code: event.code
+                    }
+                });
+            }
         }, { passive: true });
 
-        // ADDED: Enhanced focus tracking with engagement metrics
-        window.addEventListener('focus', (event) => {
-            const eventStartTime = performance.now();
-            
-            this.isPageVisible = true;
-            this.browserMetrics.eventCapture.focusEvents++;
-            
-            // ADDED: Track engagement timing
-            const now = Date.now();
-            if (this.browserMetrics.engagement.lastVisibilityChange) {
-                this.browserMetrics.engagement.timeSpentHidden += 
-                    now - this.browserMetrics.engagement.lastVisibilityChange;
-            }
-            this.browserMetrics.engagement.lastVisibilityChange = now;
-            
-            this.recordActivity('focus');
-
-            // ADDED: Track event processing time
-            const processingTime = performance.now() - eventStartTime;
-            this.browserMetrics.performance.eventProcessingTimes.push({
-                type: 'focus',
-                time: processingTime,
-                timestamp: Date.now()
-            });
-        });
-
-        window.addEventListener('blur', (event) => {
-            const eventStartTime = performance.now();
-            
-            this.isPageVisible = false;
-            this.browserMetrics.eventCapture.focusEvents++;
-            
-            // ADDED: Track engagement timing
-            const now = Date.now();
-            if (this.browserMetrics.engagement.lastVisibilityChange) {
-                this.browserMetrics.engagement.timeSpentVisible += 
-                    now - this.browserMetrics.engagement.lastVisibilityChange;
-            }
-            this.browserMetrics.engagement.lastVisibilityChange = now;
-            
-            this.recordActivity('blur');
-
-            // ADDED: Track event processing time
-            const processingTime = performance.now() - eventStartTime;
-            this.browserMetrics.performance.eventProcessingTimes.push({
-                type: 'blur',
-                time: processingTime,
-                timestamp: Date.now()
-            });
-        });
-
-        // ADDED: Enhanced page visibility tracking
-        document.addEventListener('visibilitychange', (event) => {
-            const eventStartTime = performance.now();
-            
-            this.isPageVisible = !document.hidden;
-            this.browserMetrics.eventCapture.visibilityEvents++;
-            
-            // ADDED: Track detailed visibility metrics
-            const now = Date.now();
-            if (this.browserMetrics.engagement.lastVisibilityChange) {
-                if (this.isPageVisible) {
-                    this.browserMetrics.engagement.timeSpentHidden += 
-                        now - this.browserMetrics.engagement.lastVisibilityChange;
-                } else {
-                    this.browserMetrics.engagement.timeSpentVisible += 
-                        now - this.browserMetrics.engagement.lastVisibilityChange;
-                }
-            }
-            this.browserMetrics.engagement.lastVisibilityChange = now;
-            
-            this.recordActivity('visibilitychange', {
-                visible: this.isPageVisible,
-                timestamp: Date.now()
-            });
-
-            // ADDED: Track event processing time
-            const processingTime = performance.now() - eventStartTime;
-            this.browserMetrics.performance.eventProcessingTimes.push({
-                type: 'visibilitychange',
-                time: processingTime,
-                timestamp: Date.now()
-            });
-        });
-
-        // ADDED: Mouse movement tracking (throttled) with pattern analysis
-        let mouseMoveTimeout;
+        let lastmousemoveRunTime=0;
+        const mousethrottleDelay = 100;
         let lastMousePosition = { x: 0, y: 0 };
         
         document.addEventListener('mousemove', (event) => {
             const eventStartTime = performance.now();
             
-            this.browserMetrics.eventCapture.mouseMoveEvents++;
-            
-            // ADDED: Track mouse movement patterns
-            const distance = Math.sqrt(
-                Math.pow(event.clientX - lastMousePosition.x, 2) + 
-                Math.pow(event.clientY - lastMousePosition.y, 2)
-            );
-            
-            this.browserMetrics.interactionPatterns.mouseMovements.push({
-                x: event.clientX,
-                y: event.clientY,
-                distance: distance,
-                timestamp: Date.now()
-            });
-            
-            lastMousePosition = { x: event.clientX, y: event.clientY };
-            
-            clearTimeout(mouseMoveTimeout);
-            mouseMoveTimeout = setTimeout(() => {
-                this.recordActivity('mousemove');
-            }, 5000); // Only record every 5 seconds
+            if (now - lastmousemoveRunTime >= mousethrottleDelay) {
+                lastmousemoveRunTime = now;
 
-            // ADDED: Track event processing time
-            const processingTime = performance.now() - eventStartTime;
-            this.browserMetrics.performance.eventProcessingTimes.push({
-                type: 'mousemove',
-                time: processingTime,
-                timestamp: Date.now()
-            });
-            
+                this.mousemoveCount++
+                this.browserMetrics.eventCapture.mouseMoveEvents++;
+                
+                const distance = Math.sqrt(
+                    Math.pow(event.clientX - lastMousePosition.x, 2) + 
+                    Math.pow(event.clientY - lastMousePosition.y, 2)
+                );
+
+                const mouseData = {
+                    x: event.clientX,
+                    y: event.clientY,
+                    distance: distance,
+                    timestamp: Date.now()
+                }
+                
+                this.browserMetrics.interactionPatterns.mouseMovements.push({mouseData});
+                this.recordActivity('mouseMovement', {mouseData});
+
+                lastMousePosition = { x: event.clientX, y: event.clientY };
+
+                const processingTime = performance.now() - eventStartTime;
+                this.browserMetrics.performance.eventProcessingTimes.push({
+                    type: 'mousemove',
+                    time: processingTime,
+                    timestamp: Date.now()
+                });
+
+                if (navigator.serviceWorker.controller) {
+                    navigator.serviceWorker.controller.postMessage({
+                        type: 'INTERACTION_EVENT',
+                        tabID: window.name || null,
+                        eventType: 'mousemove',
+                        timestamp: currentTimestamp,
+                        details: {
+                            x: event.clientX,
+                            y: event.clientY,
+                            distance: distance
+                        }
+                    });
+                }
+            }
         }, { passive: true });
 
-        // Page unload with final metrics
+        // Listen for page unload event to report final user metrics before the page closes or navigates away
         window.addEventListener('beforeunload', () => {
             this.reportFinalStats();
         });
+
     }
 
-    /**
-     * Enhanced periodic reporting with performance metrics
-     * MODIFIED: Added comprehensive reporting timing and browser integration stats
-     */
-    reportPeriodicStats() {
-        // ADDED: Track reporting performance
+    async startReporting() {
+        if (this.reportingTimer) {
+            clearTimeout(this.reportingTimer); // clear prev timer
+        }
+
+        const reportAndSchedule = async () => { //helper func
+            await this.reportPeriodicStats();  // Wait for report to finish
+            this.reportingTimer = setTimeout(reportAndSchedule, this.reportingInterval); // Schedule next after timeout delay
+        };
+
+        // Start immediately
+        await this.reportPeriodicStats();
+        this.reportingTimer = setTimeout(reportAndSchedule, this.reportingInterval); //next reporting cycle
+
+        // Clear on unload
+        window.addEventListener('beforeunload', () => {
+            if (this.reportingTimer) {
+            clearTimeout(this.reportingTimer);
+            this.reportingTimer = null;
+            }
+        });
+    }
+
+    async reportPeriodicStats() {
         const reportingStartTime = performance.now();
-        
         const now = Date.now();
         const timeOnPage = now - this.startTime;
         const timeSinceLastActivity = now - this.lastActivityTime;
 
-        // ADDED: Calculate interaction frequency
-        const interactionCount = this.scrollCount + this.clickCount + this.keystrokes;
-        const interactionFrequency = interactionCount / (timeOnPage / 1000); // per second
+        // Calculate interaction count + frequency
+        const interactionCount = this.scrollCount + this.clickCount + this.keystrokes + this.mousemoveCount;
+        const interactionFrequency = interactionCount / (timeOnPage / 1000); // interactions per second
+
         this.browserMetrics.engagement.interactionFrequency.push({
             timestamp: now,
             frequency: interactionFrequency
         });
 
+        // Create structured stats snapshot
         const stats = {
+            tabID: window.name,
+            domain: window.location.hostname,
             url: window.location.href,
-            hostname: window.location.hostname,
+            timestamp: now,
             timeOnPage,
             timeSinceLastActivity,
-            scrollCount: this.scrollCount,
-            clickCount: this.clickCount,
-            keystrokes: this.keystrokes,
-            isVisible: this.isPageVisible,
-            activityScore: this.calculateActivityScore(),
-            engagementLevel: this.calculateEngagementLevel(),
-            timestamp: now,
-            
-            // ADDED: Include browser integration metrics
+            isVisible: this.isPageVisible, // Still valid per tab
+
+            interactionCounts: {
+                scrolls: this.scrollCount,
+                clicks: this.clickCount,
+                keystrokes: this.keystrokes,
+                mouseMoves: this.mousemoveCount
+            }, //assume interaction is for this one tab
+
+            interactionFrequency,
+
             browserMetrics: {
                 eventCapture: { ...this.browserMetrics.eventCapture },
-                engagement: {
-                    timeSpentVisible: this.browserMetrics.engagement.timeSpentVisible,
-                    timeSpentHidden: this.browserMetrics.engagement.timeSpentHidden,
-                    visibilityRatio: this.browserMetrics.engagement.timeSpentVisible / 
-                        (this.browserMetrics.engagement.timeSpentVisible + this.browserMetrics.engagement.timeSpentHidden),
-                    currentInteractionFrequency: interactionFrequency
-                },
                 performance: {
                     averageEventProcessingTime: this.calculateMean(
                         this.browserMetrics.performance.eventProcessingTimes.map(e => e.time)
                     ),
-                    totalEventProcessingOperations: this.browserMetrics.performance.eventProcessingTimes.length
+                    totalEventProcessingOperations: this.browserMetrics.performance.eventProcessingTimes.length,
+                    reportingLatency: null // will be set below
                 }
             }
         };
 
-        // ADDED: Track messaging latency
+        // Send to background script / service worker
         const messagingStartTime = performance.now();
-        
-        this.sendToBackground({
-            type: 'page_activity',
-            data: stats
-        }).then(() => {
-            // ADDED: Record messaging latency
-            const messagingTime = performance.now() - messagingStartTime;
-            this.browserMetrics.performance.messagingLatency.push({
-                timestamp: now,
-                latency: messagingTime
-            });
-        });
+        if (navigator.serviceWorker.controller) { //Checks if a service worker controls this page/tab.
+            try {
+                await navigator.serviceWorker.controller.postMessage({
+                    type: 'PERIODIC_STATS',
+                    tabID: window.name,
+                    data: stats
+                });
 
-        // Reset counters for next period
-        this.resetCounters();
+                const messagingLatency = performance.now() - messagingStartTime;
+                stats.browserMetrics.performance.reportingLatency = messagingLatency;
 
-        // ADDED: Record reporting time
+                this.browserMetrics.performance.messagingLatency.push({
+                    timestamp: now,
+                    latency: messagingLatency
+                });
+            } catch (error) {
+                console.warn('Failed to send stats to service worker:', error);
+            }
+        }
+
+        // Log reporting time
         const reportingTime = performance.now() - reportingStartTime;
         this.browserMetrics.performance.reportingTimes.push({
             timestamp: now,
-            reportingTime: reportingTime
+            reportingTime
         });
 
-        // Keep performance arrays manageable
+        // Trim large arrays
         this.limitArraySize(this.browserMetrics.performance.eventProcessingTimes, 1000);
         this.limitArraySize(this.browserMetrics.performance.reportingTimes, 100);
         this.limitArraySize(this.browserMetrics.performance.messagingLatency, 100);
@@ -367,54 +356,23 @@ class PageActivityMonitor {
         this.limitArraySize(this.browserMetrics.interactionPatterns.keyboardActivity, 500);
         this.limitArraySize(this.browserMetrics.interactionPatterns.mouseMovements, 500);
         this.limitArraySize(this.browserMetrics.engagement.interactionFrequency, 100);
+
+        // Reset counters for next reporting window
+        this.resetCounters();
     }
 
-    // ADDED: Helper method to limit array sizes
     limitArraySize(array, maxSize) {
         while (array.length > maxSize) {
             array.shift();
         }
     }
 
-    // ADDED: Helper method to calculate mean
     calculateMean(values) {
         if (!values || values.length === 0) return 0;
         return values.reduce((sum, val) => sum + val, 0) / values.length;
     }
 
-    /**
-     * Enhanced message sending with performance tracking
-     * MODIFIED: Added promise-based messaging with latency tracking
-     */
-    sendToBackground(message) {
-        return new Promise((resolve, reject) => {
-            try {
-                const sendStartTime = performance.now();
-                
-                chrome.runtime.sendMessage(message).then((response) => {
-                    const sendTime = performance.now() - sendStartTime;
-                    
-                    // ADDED: Track messaging performance
-                    this.browserMetrics.performance.messagingLatency.push({
-                        timestamp: Date.now(),
-                        latency: sendTime,
-                        messageType: message.type
-                    });
-                    
-                    resolve(response);
-                }).catch(error => {
-                    // Service worker might be inactive, ignore errors
-                    console.debug('Background message failed:', error);
-                    reject(error);
-                });
-            } catch (error) {
-                console.debug('Runtime message error:', error);
-                reject(error);
-            }
-        });
-    }
-
-    // ADDED: Get comprehensive browser integration metrics
+    //Get comprehensive browser integration metrics
     getBrowserMetrics() {
         return {
             eventCapture: { ...this.browserMetrics.eventCapture },
@@ -440,20 +398,17 @@ class PageActivityMonitor {
                 }
             },
             interactionPatterns: {
+                scrollPatternAnalysis: this.analyzeScrollPatterns(),
                 clickPatternAnalysis: this.analyzeClickPatterns(),
                 keyboardPatternAnalysis: this.analyzeKeyboardPatterns(),
                 mouseMovementAnalysis: this.analyzeMouseMovements()
             },
             engagement: {
-                ...this.browserMetrics.engagement,
-                totalEngagementTime: this.browserMetrics.engagement.timeSpentVisible,
-                engagementRatio: this.browserMetrics.engagement.timeSpentVisible / 
-                    (Date.now() - this.startTime)
+                interactionFrequency: [...this.browserMetrics.engagement.interactionFrequency]
             }
         };
     }
 
-    // ADDED: Group event processing times by type
     groupEventProcessingByType() {
         const grouped = {};
         this.browserMetrics.performance.eventProcessingTimes.forEach(event => {
@@ -477,7 +432,21 @@ class PageActivityMonitor {
         return grouped;
     }
 
-    // ADDED: Analyze click patterns
+    analyzeScrollSpeeds() {
+        const speeds = this.browserMetrics.interactionPatterns.scrollSpeeds;
+        if (speeds.length === 0) return null;
+
+        const speedValues = speeds.map(s => Math.abs(s.speed)); // absolute speeds
+
+        return {
+            totalScrollEvents: speeds.length,
+            averageSpeed: this.calculateMean(speedValues),  // avg scroll speed (pixels/sec)
+            maxSpeed: Math.max(...speedValues),
+            minSpeed: Math.min(...speedValues),
+            scrollFrequency: speeds.length / ((Date.now() - this.startTime) / 1000)  // scrolls per second
+        };
+    }
+
     analyzeClickPatterns() {
         const positions = this.browserMetrics.interactionPatterns.clickPositions;
         if (positions.length === 0) return null;
@@ -491,19 +460,72 @@ class PageActivityMonitor {
         };
     }
 
-    // ADDED: Analyze keyboard patterns
-    analyzeKeyboardPatterns() {
+    analyzeKeyboardPatternsAdvanced() {
         const activity = this.browserMetrics.interactionPatterns.keyboardActivity;
+        const keyUpActivity = this.browserMetrics.interactionPatterns.keyboardKeyUpActivity || [];
+
         if (activity.length === 0) return null;
 
+        // 1. Key Code Distribution
+        const keyCodeFrequency = {};
+        for (const entry of activity) {
+            keyCodeFrequency[entry.code] = (keyCodeFrequency[entry.code] || 0) + 1;
+        }
+
+        // 2. Typing Speed / Burstiness (inter-keystroke intervals)
+        const intervals = [];
+        for (let i = 1; i < activity.length; i++) {
+            intervals.push(activity[i].timestamp - activity[i-1].timestamp);
+        }
+        const avgInterval = intervals.length ? this.calculateMean(intervals) : null;
+
+        // 3. Error Patterns: count Backspace/Delete usage
+        const errorCount = (keyCodeFrequency['Backspace'] || 0) + (keyCodeFrequency['Delete'] || 0);
+
+        // 4. Key Hold Durations (match keydown and keyup by code)
+        // Build maps from code to timestamps for keydown and keyup events
+        const holdDurations = [];
+        const downMap = new Map(); // code -> stack of down timestamps
+
+        for (const downEvent of activity) {
+            if (!downMap.has(downEvent.code)) downMap.set(downEvent.code, []);
+            downMap.get(downEvent.code).push(downEvent.timestamp);
+        }
+
+        // For each keyup, try to match with the earliest unmatched keydown timestamp
+        for (const upEvent of keyUpActivity) {
+            const stack = downMap.get(upEvent.code);
+            if (stack && stack.length > 0) {
+                const downTime = stack.shift();
+                const duration = upEvent.timestamp - downTime;
+                if (duration >= 0) holdDurations.push(duration);
+            }
+        }
+        const avgHoldDuration = holdDurations.length ? this.calculateMean(holdDurations) : null;
+
+        // 5. Special Key Usage (Enter, Arrow keys)
+        const specialKeys = ['Enter', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'];
+        const specialKeyUsage = {};
+        for (const key of specialKeys) {
+            specialKeyUsage[key] = keyCodeFrequency[key] || 0;
+        }
+
+        // Total keystrokes & frequency
+        const totalKeystrokes = activity.length;
+        const timeOnPageSec = (Date.now() - this.startTime) / 1000;
+        const keystrokeFrequency = totalKeystrokes / timeOnPageSec;
+
         return {
-            totalKeystrokes: activity.length,
-            keystrokeFrequency: activity.length / ((Date.now() - this.startTime) / 1000),
-            modifierKeyUsage: activity.filter(a => a.isModifier).length / activity.length
+            totalKeystrokes,
+            keystrokeFrequency,
+            keyCodeFrequency,
+            averageInterKeystrokeIntervalMs: avgInterval,
+            errorKeyCount: errorCount,
+            averageKeyHoldDurationMs: avgHoldDuration,
+            specialKeyUsage
         };
     }
 
-    // ADDED: Analyze mouse movements
     analyzeMouseMovements() {
         const movements = this.browserMetrics.interactionPatterns.mouseMovements;
         if (movements.length === 0) return null;
@@ -517,7 +539,6 @@ class PageActivityMonitor {
         };
     }
 
-    // ADDED: Count element types in click positions
     countElementTypes(positions) {
         const counts = {};
         positions.forEach(pos => {
@@ -537,27 +558,16 @@ class PageActivityMonitor {
             activityScore: this.calculateActivityScore(),
             engagementLevel: this.calculateEngagementLevel(),
             
-            // ADDED: Include browser integration metrics
             browserMetrics: this.getBrowserMetrics()
         };
     }
 
-    startReporting() {
-        if (this.reportingTimer) {
-            clearInterval(this.reportingTimer);
-        }
-        this.reportingTimer = setInterval(() => {
-            this.reportPeriodicStats();
-        }, this.reportingInterval);
-        // Also report once immediately
-        this.reportPeriodicStats();
-        // Clear interval on unload
-        window.addEventListener('beforeunload', () => {
-            if (this.reportingTimer) {
-                clearInterval(this.reportingTimer);
-                this.reportingTimer = null;
-            }
-        });
+    calculateActivityScore() {
+        // Simple activity score: weighted sum of scrolls, clicks, keystrokes per minute
+        const now = Date.now();
+        const minutes = Math.max((now - this.startTime) / 60000, 1);
+        const score = (this.scrollCount + this.clickCount + this.keystrokes) / minutes;
+        return Math.round(score * 10) / 10; // One decimal place
     }
 
     /**
@@ -579,27 +589,6 @@ class PageActivityMonitor {
         }
     }
 
-    calculateActivityScore() {
-        // Simple activity score: weighted sum of scrolls, clicks, keystrokes per minute
-        const now = Date.now();
-        const minutes = Math.max((now - this.startTime) / 60000, 1);
-        const score = (this.scrollCount + this.clickCount + this.keystrokes) / minutes;
-        return Math.round(score * 10) / 10; // One decimal place
-    }
-
-    /**
-     * Calculate engagement level based on activity and visibility
-     * Returns: 'high', 'medium', or 'low'
-     */
-    calculateEngagementLevel() {
-        // Example: simple heuristic based on activity score and visibility
-        const activityScore = this.calculateActivityScore();
-        const visibleRatio = this.isPageVisible ? 1 : 0;
-        if (activityScore > 30 && visibleRatio > 0.8) return 'high';
-        if (activityScore > 10 && visibleRatio > 0.5) return 'medium';
-        return 'low';
-    }
-
     reportFinalStats() {
         // Report final stats before unload (similar to reportPeriodicStats)
         const now = Date.now();
@@ -617,7 +606,6 @@ class PageActivityMonitor {
             keystrokes: this.keystrokes,
             isVisible: this.isPageVisible,
             activityScore: this.calculateActivityScore(),
-            engagementLevel: this.calculateEngagementLevel ? this.calculateEngagementLevel() : 'unknown',
             timestamp: now,
             browserMetrics: {
                 eventCapture: { ...this.browserMetrics.eventCapture },
@@ -638,56 +626,9 @@ class PageActivityMonitor {
 // Initialize the monitor
 const pageActivityMonitor = new PageActivityMonitor();
 
-////////////////////////////////////////////////////////////////////////////////
-// 1) Helper to read & apply the user’s host→category rules on this page
-
-function applySiteCategory() {
-  chrome.storage.sync.get({ siteCategories: {} }, data => {
-    const map = data.siteCategories;           // the stored rules
-    const host = location.hostname;            // current tab’s host
-    const category = map[host];                // lookup
-
-    if (category === 'unhealthy') {
-      // e.g. inject a red warning banner
-      injectBanner('Warning: Unhealthy site usage detected', 'red');
-    } 
-    else if (category === 'productive') {
-      // e.g. add a green border
-      document.body.style.border = '5px solid #48bb78';
-    }
-    // handle other categories as needed…
-  });
-}
-
-////////////////////////////////////////////////////////////////////////////////
-// 2) Run on initial load
-
-applySiteCategory();
-
-////////////////////////////////////////////////////////////////////////////////
-// 3) Re-run whenever the user edits their rules
-
-chrome.storage.onChanged.addListener((changes, area) => {
-  if (area === 'sync' && changes.siteCategories) {
-    applySiteCategory();
-  }
-});
-
 // Make it globally accessible for debugging
 window.pageActivityMonitor = pageActivityMonitor;
 
-// Handle messages from background script
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    if (message.action === 'getPageStats') {
-        sendResponse(pageActivityMonitor.getCurrentStats());
-    } else if (message.action === 'resetPageStats') {
-        pageActivityMonitor.resetCounters();
-        sendResponse({ success: true });
-    }
-    return true;
-});
-
-// ADDED: Enhanced message handling for research metrics
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.action === 'getPageStats') {
         sendResponse(pageActivityMonitor.getCurrentStats());
@@ -695,11 +636,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         pageActivityMonitor.resetCounters();
         sendResponse({ success: true });
     } else if (message.action === 'getBrowserMetrics') {
-        // ADDED: New action for browser integration metrics
         sendResponse(pageActivityMonitor.getBrowserMetrics());
     }
-
-    return true;
+    return true; // Indicates async response if needed
 });
 
 console.log('🔍 Content script loaded for comprehensive page activity monitoring and research metrics');
