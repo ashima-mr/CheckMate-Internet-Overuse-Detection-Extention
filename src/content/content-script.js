@@ -1,644 +1,565 @@
 class PageActivityMonitor {
-  constructor() {
-    this.startTime = Date.now();              // When the page session started
-    this.lastActivityTime = Date.now();       // Last time user interacted with the page
-    this.scrollCount = 0;                     // Number of scroll events
-    this.clickCount = 0;                      // Number of click events
-    this.keystrokes = 0;                      // Number of keydown events
-    this.mousemoveCount = 0;                  
-    this.activityBuffer = [];                 // Buffer for recent activity events
-    this.reportingInterval = 30000;           // How often to report stats (30s)
-    this.reportingTimer = null;               // Reference to reporting interval
+  /* ───────────────────────── Initialisation ─────────────────────── */
+  constructor () {
+    /* Timing */
+    this.startTime        = Date.now();
+    this.lastActivityTime = Date.now();
 
-    // Metrics for research and system evaluation
+    /* Event counters */
+    this.scrollCount    = 0;
+    this.clickCount     = 0;
+    this.keystrokes     = 0;
+    this.mousemoveCount = 0;
+
+    /* Page-level state */
+    this.isPageVisible  = !document.hidden;
+    this.activityBuffer = [];
+
+    /* Reporting config */
+    this.reportingInterval = 30_000;           // 30 s
+    this.reportingTimer    = null;
+
+    /* Research metrics container */
     this.browserMetrics = {
-      eventCapture: {                         // Counts for each event type
-        scrollEvents: 0,
-        clickEvents: 0,
-        keyEvents: 0,
+      eventCapture: {
+        scrollEvents:   0,
+        clickEvents:    0,
+        keyEvents:      0,
         mouseMoveEvents: 0
       },
-      performance: {                          // Timing and latency metrics
-        eventProcessingTimes: [],
-        reportingTimes: [],
-        messagingLatency: []
+      performance: {
+        eventProcessingTimes: [],   // {type,time,ts}
+        reportingTimes:       [],   // {reportingTime,ts}
+        messagingLatency:     []    // {latency,ts}
       },
-      interactionPatterns: {                  // Patterns for advanced analysis
-        scrollSpeeds: [],
-        clickPositions: [],
-        keyboardActivity: [],
-        mouseMovements: []
+      interactionPatterns: {
+        scrollSpeeds:   [],         // {scrollY,speed,ts}
+        clickPositions: [],         // {x,y,element,ts}
+        keyboardActivity: [],       // {code,ts}
+        keyboardKeyUpActivity: [],  // {code,ts}
+        mouseMovements: []          // {x,y,distance,ts}
       },
-      engagement: {          
-        interactionFrequency: []
+      engagement: {
+        interactionFrequency: []    // {frequency,ts}
       }
     };
 
-    this.init();                              // Set up event listeners and reporting
+    /* Bindings */
+    this.limitArraySize = this.limitArraySize.bind(this);
+
+    /* Launch monitoring */
+    this.init();
   }
 
-    init() {
-        this.setupEventListeners();
-        this.startReporting();
-        console.log('📊 Page Activity Monitor initialized on:', window.location.hostname);
-    }
+  /* ─────────────────────────── Set-up ───────────────────────────── */
+  init () {
+    this.setupEventListeners();
+    this.startReporting();
+    console.log('📊 Page Activity Monitor initialised on:', window.location.hostname);
+  }
 
-    setupEventListeners() {
+  setupEventListeners () {
+    /* Tab identifier (per-tab session key) */
+    if (!window.name) window.name = crypto.randomUUID();
 
-        if (!window.name) {
-            window.name = crypto.randomUUID();
+    /* Visibility events */
+    document.addEventListener('visibilitychange', () => {
+      this.isPageVisible = !document.hidden;
+      navigator.serviceWorker.controller?.postMessage({
+        type: 'VISIBILITY_CHANGE',
+        tabID: window.name,
+        visibilityState: document.visibilityState,
+        timestamp: Date.now()
+      });
+    });
+
+    /* Scroll tracking (throttled) */
+    this.prevScrollY         = window.scrollY;
+    this.prevScrollTimestamp = Date.now();
+    let lastScrollRunTime    = 0;
+    const scrollThrottleMs   = 150;
+
+    window.addEventListener('scroll', event => {
+      const now = Date.now();
+      if (now - lastScrollRunTime < scrollThrottleMs) return;
+      lastScrollRunTime = now;
+
+      const eventStart = performance.now();
+      const deltaY     = window.scrollY - this.prevScrollY;
+      const deltaTime  = (now - this.prevScrollTimestamp) / 1000;
+      const speed      = deltaTime > 0 ? deltaY / deltaTime : 0;
+
+      /* Counters */
+      this.scrollCount++;
+      this.browserMetrics.eventCapture.scrollEvents++;
+
+      /* Pattern array */
+      const data = { scrollY: window.scrollY, speed, timestamp: now };
+      this.browserMetrics.interactionPatterns.scrollSpeeds.push(data);
+      this.recordActivity('scroll', data);
+
+      /* Perf */
+      this.browserMetrics.performance.eventProcessingTimes.push({
+        type: 'scroll',
+        time: performance.now() - eventStart,
+        timestamp: now
+      });
+
+      /* Broadcast */
+      navigator.serviceWorker.controller?.postMessage({
+        type: 'INTERACTION_EVENT',
+        tabID: window.name,
+        eventType: 'scroll',
+        timestamp: now,
+        details: data
+      });
+
+      /* Update previous state */
+      this.prevScrollY         = window.scrollY;
+      this.prevScrollTimestamp = now;
+    }, { passive: true });
+
+    /* Click tracking */
+    document.addEventListener('click', event => {
+      const now        = Date.now();
+      const eventStart = performance.now();
+
+      this.clickCount++;
+      this.browserMetrics.eventCapture.clickEvents++;
+
+      const data = {
+        x: event.clientX,
+        y: event.clientY,
+        element: event.target.tagName,
+        timestamp: now
+      };
+      this.browserMetrics.interactionPatterns.clickPositions.push(data);
+      this.recordActivity('click', data);
+
+      this.browserMetrics.performance.eventProcessingTimes.push({
+        type: 'click',
+        time: performance.now() - eventStart,
+        timestamp: now
+      });
+
+      navigator.serviceWorker.controller?.postMessage({
+        type: 'INTERACTION_EVENT',
+        tabID: window.name,
+        eventType: 'click',
+        timestamp: now,
+        details: data
+      });
+    }, { passive: true });
+
+    /* Keyboard tracking (keydown + keyup for hold duration) */
+    document.addEventListener('keydown', event => {
+      const now        = Date.now();
+      const eventStart = performance.now();
+
+      this.keystrokes++;
+      this.browserMetrics.eventCapture.keyEvents++;
+
+      const data = { code: event.code, timestamp: now };
+      this.browserMetrics.interactionPatterns.keyboardActivity.push(data);
+      this.recordActivity('keydown', data);
+
+      this.browserMetrics.performance.eventProcessingTimes.push({
+        type: 'keydown',
+        time: performance.now() - eventStart,
+        timestamp: now
+      });
+
+      navigator.serviceWorker.controller?.postMessage({
+        type: 'INTERACTION_EVENT',
+        tabID: window.name,
+        eventType: 'keydown',
+        timestamp: now,
+        details: data
+      });
+    }, { passive: true });
+
+    document.addEventListener('keyup', event => {
+      const now = Date.now();
+      this.browserMetrics.interactionPatterns.keyboardKeyUpActivity.push({
+        code: event.code,
+        timestamp: now
+      });
+    }, { passive: true });
+
+    /* Mouse-move tracking (throttled) */
+    let lastMouseMoveRunTime = 0;
+    const mouseThrottleMs    = 100;
+    let lastMousePos         = { x: 0, y: 0 };
+
+    document.addEventListener('mousemove', event => {
+      const now = Date.now();
+      if (now - lastMouseMoveRunTime < mouseThrottleMs) return;
+      lastMouseMoveRunTime = now;
+
+      const eventStart = performance.now();
+      this.mousemoveCount++;
+      this.browserMetrics.eventCapture.mouseMoveEvents++;
+
+      const distance = Math.hypot(event.clientX - lastMousePos.x, event.clientY - lastMousePos.y);
+      const data = { x: event.clientX, y: event.clientY, distance, timestamp: now };
+
+      this.browserMetrics.interactionPatterns.mouseMovements.push(data);
+      this.recordActivity('mousemove', data);
+
+      this.browserMetrics.performance.eventProcessingTimes.push({
+        type: 'mousemove',
+        time: performance.now() - eventStart,
+        timestamp: now
+      });
+
+      navigator.serviceWorker.controller?.postMessage({
+        type: 'INTERACTION_EVENT',
+        tabID: window.name,
+        eventType: 'mousemove',
+        timestamp: now,
+        details: data
+      });
+
+      lastMousePos = { x: event.clientX, y: event.clientY };
+    }, { passive: true });
+
+    /* Final flush */
+    window.addEventListener('beforeunload', () => this.reportFinalStats());
+  }
+
+  /* ─────────────────────── Periodic Reporting ───────────────────── */
+  async startReporting () {
+    if (this.reportingTimer) clearTimeout(this.reportingTimer);
+
+    const loop = async () => {
+      await this.reportPeriodicStats();
+      this.reportingTimer = setTimeout(loop, this.reportingInterval);
+    };
+
+    /* Kick-off immediately */
+    await this.reportPeriodicStats();
+    this.reportingTimer = setTimeout(loop, this.reportingInterval);
+
+    /* Clear on unload */
+    window.addEventListener('beforeunload', () => {
+      clearTimeout(this.reportingTimer);
+      this.reportingTimer = null;
+    });
+  }
+
+  async reportPeriodicStats () {
+    const t0  = performance.now();
+    const now = Date.now();
+
+    /* Engagement calc */
+    const timeOnPage          = now - this.startTime;
+    const timeSinceLast       = now - this.lastActivityTime;
+    const interactionCount    = this.scrollCount + this.clickCount + this.keystrokes + this.mousemoveCount;
+    const interactionFrequency = interactionCount / Math.max(timeOnPage / 1000, 1);
+
+    this.browserMetrics.engagement.interactionFrequency.push({ timestamp: now, frequency: interactionFrequency });
+
+    const stats = {
+      tabID: window.name,
+      domain: window.location.hostname,
+      url: window.location.href,
+      timestamp: now,
+      timeOnPage,
+      timeSinceLastActivity: timeSinceLast,
+      isVisible: this.isPageVisible,
+
+      interactionCounts: {
+        scrolls:   this.scrollCount,
+        clicks:    this.clickCount,
+        keystrokes:this.keystrokes,
+        mouseMoves:this.mousemoveCount
+      },
+
+      interactionFrequency,
+
+      browserMetrics: {
+        eventCapture: { ...this.browserMetrics.eventCapture },
+        performance: {
+          averageEventProcessingTime: this.calculateMean(
+            this.browserMetrics.performance.eventProcessingTimes.map(e => e.time)
+          ),
+          totalEventProcessingOperations: this.browserMetrics.performance.eventProcessingTimes.length,
+          reportingLatency: null
         }
+      }
+    };
 
-        // Send visibility state changes to service worker
-        document.addEventListener('visibilitychange', () => {
-            navigator.serviceWorker.controller?.postMessage({
-                type: 'VISIBILITY_CHANGE',
-                tabID: window.name || null, // or generate a unique ID per tab if needed
-                visibilityState: document.visibilityState,
-                timestamp: Date.now()
-            });
-        });
+    /* Post to service-worker */
+    const sendT0 = performance.now();
+    try {
+      await navigator.serviceWorker.controller?.postMessage({
+        type: 'PERIODIC_STATS',
+        tabID: window.name,
+        data: stats
+      });
 
-        this.prevScrollY = window.scrollY;
-        this.prevScrollTimestamp = Date.now();
+      const latency = performance.now() - sendT0;
+      stats.browserMetrics.performance.reportingLatency = latency;
+      this.browserMetrics.performance.messagingLatency.push({ timestamp: now, latency });
+    } catch (err) {
+      console.warn('PERIODIC_STATS send failed:', err);
+    }
 
-        let lastscrollRunTime = 0;             // Track last time handler ran
-        const scrollthrottleDelay = 150;      // 150ms throttle delay
+    /* Perf bookkeeping */
+    this.browserMetrics.performance.reportingTimes.push({
+      timestamp: now,
+      reportingTime: performance.now() - t0
+    });
 
-        window.addEventListener('scroll', (event) => {
-            const now = Date.now();
+    /* Memory hygiene */
+    this.limitArraySize(this.browserMetrics.performance.eventProcessingTimes, 1000);
+    this.limitArraySize(this.browserMetrics.performance.reportingTimes,       100);
+    this.limitArraySize(this.browserMetrics.performance.messagingLatency,     100);
+    this.limitArraySize(this.browserMetrics.interactionPatterns.clickPositions,   500);
+    this.limitArraySize(this.browserMetrics.interactionPatterns.keyboardActivity, 500);
+    this.limitArraySize(this.browserMetrics.interactionPatterns.mouseMovements,  500);
+    this.limitArraySize(this.browserMetrics.interactionPatterns.scrollSpeeds,    500);
+    this.limitArraySize(this.browserMetrics.engagement.interactionFrequency,     100);
 
-            if (now - lastscrollRunTime >= scrollthrottleDelay) {
-                lastscrollRunTime = now;
+    /* Reset interval counters */
+    this.resetCounters();
+  }
 
-                const eventStartTime = performance.now();
+  reportFinalStats () {
+    const now = Date.now();
+    const timeOnPage          = now - this.startTime;
+    const timeSinceLast       = now - this.lastActivityTime;
+    const interactionCount    = this.scrollCount + this.clickCount + this.keystrokes + this.mousemoveCount;
+    const interactionFrequency = interactionCount / Math.max(timeOnPage / 1000, 1);
 
-                const currentScrollY = window.scrollY;
-                const currentTimestamp = now;
+    const stats = {
+      tabID: window.name,
+      url: window.location.href,
+      hostname: window.location.hostname,
+      timestamp: now,
+      timeOnPage,
+      timeSinceLastActivity: timeSinceLast,
+      interactionCounts: {
+        scrolls:   this.scrollCount,
+        clicks:    this.clickCount,
+        keystrokes:this.keystrokes,
+        mouseMoves:this.mousemoveCount
+      },
+      interactionFrequency,
+      isVisible: this.isPageVisible,
+      activityScore: this.calculateActivityScore(),
+      browserMetrics: { ...this.browserMetrics }
+    };
 
-                const deltaY = currentScrollY - this.prevScrollY;
-                const deltaTime = (currentTimestamp - this.prevScrollTimestamp) / 1000; // seconds
-                const scrollSpeed = deltaTime > 0 ? deltaY / deltaTime : 0;
+    try {
+      chrome.runtime.sendMessage({ action: 'finalStats', stats });
+    } catch (err) {
+      console.warn('finalStats send failed:', err);
+    }
+  }
 
-                this.scrollCount++;
-                this.browserMetrics.eventCapture.scrollEvents++;
+  /* ───────────────────── Utilities & Helpers ────────────────────── */
+  calculateActivityScore () {
+    const minutes = Math.max((Date.now() - this.startTime) / 60_000, 1);
+    const score   = (this.scrollCount + this.clickCount + this.keystrokes) / minutes;
+    return Math.round(score * 10) / 10;
+  }
 
-                const scrollData = {
-                    scrollY: currentScrollY,
-                    timestamp: currentTimestamp,
-                    speed: scrollSpeed
-                };
+  recordActivity (type, details = {}) {
+    const activity = { type, timestamp: Date.now(), ...details };
+    this.activityBuffer.push(activity);
+    this.lastActivityTime = activity.timestamp;
+    if (this.activityBuffer.length > 500) this.activityBuffer.shift();
+  }
 
-                this.browserMetrics.interactionPatterns.scrollSpeeds.push(scrollData);
-                this.recordActivity('scroll', scrollData);
+  resetCounters () {
+    this.scrollCount    = 0;
+    this.clickCount     = 0;
+    this.keystrokes     = 0;
+    this.mousemoveCount = 0;
+  }
 
-                this.prevScrollY = currentScrollY;
-                this.prevScrollTimestamp = currentTimestamp;
+  limitArraySize (arr, max) {
+    if (arr.length > max) arr.splice(0, arr.length - max);
+  }
 
-                const processingTime = performance.now() - eventStartTime;
-                this.browserMetrics.performance.eventProcessingTimes.push({
-                    type: 'scroll',
-                    time: processingTime,
-                    timestamp: Date.now()
-                });
+  calculateMean (vals) {
+    if (!vals.length) return 0;
+    return vals.reduce((s, v) => s + v, 0) / vals.length;
+  }
 
-                if (navigator.serviceWorker.controller) {
-                    navigator.serviceWorker.controller.postMessage({
-                        type: 'INTERACTION_EVENT',
-                        tabID: window.name || null,
-                        eventType: 'scroll',
-                        timestamp: currentTimestamp,
-                        details: {
-                            scrollY: currentScrollY,
-                            speed: scrollSpeed
-                        }
-                    });
-                }
-            }
-        }, { passive: true });
+  groupEventProcessingByType () {
+    const grouped = {};
+    this.browserMetrics.performance.eventProcessingTimes.forEach(e => {
+      (grouped[e.type] = grouped[e.type] || []).push(e.time);
+    });
+    Object.keys(grouped).forEach(t => {
+      const list = grouped[t];
+      grouped[t] = {
+        count:   list.length,
+        average: this.calculateMean(list),
+        min:     Math.min(...list),
+        max:     Math.max(...list)
+      };
+    });
+    return grouped;
+  }
 
-        // click tracking with position metrics
-        document.addEventListener('click', (event) => {
-            const eventStartTime = performance.now();
-            
-            this.clickCount++;
-            this.browserMetrics.eventCapture.clickEvents++;
-            
-            const clickData = {
-                x: event.clientX,
-                y: event.clientY,
-                element: event.target.tagName,
-                timestamp: Date.now()
-            }
-            this.browserMetrics.interactionPatterns.clickPositions.push({clickData});
-            this.recordActivity('click', {clickData});
+  /* ───── Pattern analysers (lightweight — extend as needed) ────── */
+  analyzeScrollSpeeds () {
+    const list = this.browserMetrics.interactionPatterns.scrollSpeeds;
+    if (!list.length) return null;
+    const speeds = list.map(s => Math.abs(s.speed));
+    return {
+      totalScrollEvents: list.length,
+      averageSpeed: this.calculateMean(speeds),
+      maxSpeed: Math.max(...speeds),
+      minSpeed: Math.min(...speeds),
+      frequency: list.length / Math.max((Date.now() - this.startTime) / 1000, 1)
+    };
+  }
 
-            const processingTime = performance.now() - eventStartTime;
-            this.browserMetrics.performance.eventProcessingTimes.push({
-                type: 'click',
-                time: processingTime,
-                timestamp: Date.now()
-            });
+  analyzeClickPatterns () {
+    const list = this.browserMetrics.interactionPatterns.clickPositions;
+    if (!list.length) return null;
+    return {
+      totalClicks: list.length,
+      averageX: this.calculateMean(list.map(p => p.x)),
+      averageY: this.calculateMean(list.map(p => p.y)),
+      frequency: list.length / Math.max((Date.now() - this.startTime) / 1000, 1),
+      elementDistribution: list.reduce((acc, p) => {
+        acc[p.element] = (acc[p.element] || 0) + 1; return acc;
+      }, {})
+    };
+  }
 
-            if (navigator.serviceWorker.controller) {
-            navigator.serviceWorker.controller.postMessage({
-                type: 'INTERACTION_EVENT',
-                tabID: window.name || null,
-                eventType: 'click',
-                timestamp: currentTimestamp,
-                details: {
-                    x: event.clientX,
-                    y: event.clientY,
-                    element: event.target.tagName
-                }
-            });
+  analyzeKeyboardPatterns () {
+    const down = this.browserMetrics.interactionPatterns.keyboardActivity;
+    if (!down.length) return null;
+
+    /* Key-code distribution */
+    const freq = {}; down.forEach(e => { freq[e.code] = (freq[e.code] || 0) + 1; });
+
+    /* Inter-keystroke intervals */
+    const intervals = [];
+    for (let i = 1; i < down.length; i++) intervals.push(down[i].timestamp - down[i - 1].timestamp);
+
+    /* Hold duration estimation */
+    const up   = this.browserMetrics.interactionPatterns.keyboardKeyUpActivity;
+    const downMap = new Map();          // code → queue of ts
+    down.forEach(e => {
+      if (!downMap.has(e.code)) downMap.set(e.code, []);
+      downMap.get(e.code).push(e.timestamp);
+    });
+    const holds = [];
+    up.forEach(u => {
+      const q = downMap.get(u.code);
+      if (q?.length) holds.push(u.timestamp - q.shift());
+    });
+
+    return {
+      totalKeystrokes: down.length,
+      frequency: down.length / Math.max((Date.now() - this.startTime) / 1000, 1),
+      keyCodeFrequency: freq,
+      averageIntervalMs: this.calculateMean(intervals),
+      errorKeyCount: (freq['Backspace'] || 0) + (freq['Delete'] || 0),
+      averageHoldMs: this.calculateMean(holds),
+      specialKeyUsage: ['Enter','ArrowUp','ArrowDown','ArrowLeft','ArrowRight']
+        .reduce((o,k) => (o[k] = freq[k] || 0, o), {})
+    };
+  }
+
+  analyzeMouseMovements () {
+    const list = this.browserMetrics.interactionPatterns.mouseMovements;
+    if (!list.length) return null;
+    const dist = list.map(m => m.distance);
+    return {
+      totalMovements: list.length,
+      averageDistance: this.calculateMean(dist),
+      totalDistance: dist.reduce((s,d) => s + d, 0),
+      frequency: list.length / Math.max((Date.now() - this.startTime) / 1000, 1)
+    };
+  }
+
+  /* ─────────── Public getters (for popup / debugging) ──────────── */
+  getBrowserMetrics () {
+    return {
+      eventCapture: { ...this.browserMetrics.eventCapture },
+      performance: {
+        eventProcessingSummary: {
+          total: this.browserMetrics.performance.eventProcessingTimes.length,
+          averageTime: this.calculateMean(
+            this.browserMetrics.performance.eventProcessingTimes.map(e => e.time)
+          ),
+          byEventType: this.groupEventProcessingByType()
+        },
+        reportingSummary: {
+          total: this.browserMetrics.performance.reportingTimes.length,
+          averageTime: this.calculateMean(
+            this.browserMetrics.performance.reportingTimes.map(r => r.reportingTime)
+          )
+        },
+        messagingSummary: {
+          total: this.browserMetrics.performance.messagingLatency.length,
+          averageLatency: this.calculateMean(
+            this.browserMetrics.performance.messagingLatency.map(m => m.latency)
+          )
         }
-            
-        }, { passive: true });
+      },
+      interactionPatterns: {
+        scroll:  this.analyzeScrollSpeeds(),
+        clicks:  this.analyzeClickPatterns(),
+        keyboard:this.analyzeKeyboardPatterns(),
+        mouse:   this.analyzeMouseMovements()
+      },
+      engagement: {
+        interactionFrequency: [ ...this.browserMetrics.engagement.interactionFrequency ]
+      }
+    };
+  }
 
-        document.addEventListener('keydown', (event) => {
-            const eventStartTime = performance.now();
-            
-            this.keystrokes++;
-            this.browserMetrics.eventCapture.keyEvents++;
-            
-            const keyboardData = {
-                timestamp: Date.now(),
-                code: event.code
-            };
+  getCurrentStats () {
+    return {
+      timeOnPage: Date.now() - this.startTime,
+      scrollCount: this.scrollCount,
+      clickCount: this.clickCount,
+      keystrokes: this.keystrokes,
+      mousemoveCount: this.mousemoveCount,
+      isVisible: this.isPageVisible,
+      activityScore: this.calculateActivityScore(),
+      browserMetrics: this.getBrowserMetrics()
+    };
+  }
 
-            this.browserMetrics.interactionPatterns.keyboardActivity.push(keyboardData);
-            this.recordActivity('keydown', keyboardData);
+  /* ──────────── Settings / control (optional use) ─────────────── */
+  stopMonitoring () { clearTimeout(this.reportingTimer); }
+  resumeMonitoring () { this.startReporting(); }
 
-            const processingTime = performance.now() - eventStartTime;
-            this.browserMetrics.performance.eventProcessingTimes.push({
-                type: 'keydown',
-                time: processingTime,
-                timestamp: Date.now()
-            });
-
-            if (navigator.serviceWorker.controller) {
-                navigator.serviceWorker.controller.postMessage({
-                    type: 'INTERACTION_EVENT',
-                    tabID: window.name || null,
-                    eventType: 'keydown',
-                    timestamp: currentTimestamp,
-                    details: {
-                        code: event.code
-                    }
-                });
-            }
-        }, { passive: true });
-
-        let lastmousemoveRunTime=0;
-        const mousethrottleDelay = 100;
-        let lastMousePosition = { x: 0, y: 0 };
-        
-        document.addEventListener('mousemove', (event) => {
-            const eventStartTime = performance.now();
-            
-            if (now - lastmousemoveRunTime >= mousethrottleDelay) {
-                lastmousemoveRunTime = now;
-
-                this.mousemoveCount++
-                this.browserMetrics.eventCapture.mouseMoveEvents++;
-                
-                const distance = Math.sqrt(
-                    Math.pow(event.clientX - lastMousePosition.x, 2) + 
-                    Math.pow(event.clientY - lastMousePosition.y, 2)
-                );
-
-                const mouseData = {
-                    x: event.clientX,
-                    y: event.clientY,
-                    distance: distance,
-                    timestamp: Date.now()
-                }
-                
-                this.browserMetrics.interactionPatterns.mouseMovements.push({mouseData});
-                this.recordActivity('mouseMovement', {mouseData});
-
-                lastMousePosition = { x: event.clientX, y: event.clientY };
-
-                const processingTime = performance.now() - eventStartTime;
-                this.browserMetrics.performance.eventProcessingTimes.push({
-                    type: 'mousemove',
-                    time: processingTime,
-                    timestamp: Date.now()
-                });
-
-                if (navigator.serviceWorker.controller) {
-                    navigator.serviceWorker.controller.postMessage({
-                        type: 'INTERACTION_EVENT',
-                        tabID: window.name || null,
-                        eventType: 'mousemove',
-                        timestamp: currentTimestamp,
-                        details: {
-                            x: event.clientX,
-                            y: event.clientY,
-                            distance: distance
-                        }
-                    });
-                }
-            }
-        }, { passive: true });
-
-        // Listen for page unload event to report final user metrics before the page closes or navigates away
-        window.addEventListener('beforeunload', () => {
-            this.reportFinalStats();
-        });
-
+  updateSettings (opts = {}) {
+    if (opts.reportingInterval && Number.isFinite(opts.reportingInterval)) {
+      this.reportingInterval = Math.max(5_000, opts.reportingInterval);
+      this.stopMonitoring(); this.resumeMonitoring();
     }
-
-    async startReporting() {
-        if (this.reportingTimer) {
-            clearTimeout(this.reportingTimer); // clear prev timer
-        }
-
-        const reportAndSchedule = async () => { //helper func
-            await this.reportPeriodicStats();  // Wait for report to finish
-            this.reportingTimer = setTimeout(reportAndSchedule, this.reportingInterval); // Schedule next after timeout delay
-        };
-
-        // Start immediately
-        await this.reportPeriodicStats();
-        this.reportingTimer = setTimeout(reportAndSchedule, this.reportingInterval); //next reporting cycle
-
-        // Clear on unload
-        window.addEventListener('beforeunload', () => {
-            if (this.reportingTimer) {
-            clearTimeout(this.reportingTimer);
-            this.reportingTimer = null;
-            }
-        });
-    }
-
-    async reportPeriodicStats() {
-        const reportingStartTime = performance.now();
-        const now = Date.now();
-        const timeOnPage = now - this.startTime;
-        const timeSinceLastActivity = now - this.lastActivityTime;
-
-        // Calculate interaction count + frequency
-        const interactionCount = this.scrollCount + this.clickCount + this.keystrokes + this.mousemoveCount;
-        const interactionFrequency = interactionCount / (timeOnPage / 1000); // interactions per second
-
-        this.browserMetrics.engagement.interactionFrequency.push({
-            timestamp: now,
-            frequency: interactionFrequency
-        });
-
-        // Create structured stats snapshot
-        const stats = {
-            tabID: window.name,
-            domain: window.location.hostname,
-            url: window.location.href,
-            timestamp: now,
-            timeOnPage,
-            timeSinceLastActivity,
-            isVisible: this.isPageVisible, // Still valid per tab
-
-            interactionCounts: {
-                scrolls: this.scrollCount,
-                clicks: this.clickCount,
-                keystrokes: this.keystrokes,
-                mouseMoves: this.mousemoveCount
-            }, //assume interaction is for this one tab
-
-            interactionFrequency,
-
-            browserMetrics: {
-                eventCapture: { ...this.browserMetrics.eventCapture },
-                performance: {
-                    averageEventProcessingTime: this.calculateMean(
-                        this.browserMetrics.performance.eventProcessingTimes.map(e => e.time)
-                    ),
-                    totalEventProcessingOperations: this.browserMetrics.performance.eventProcessingTimes.length,
-                    reportingLatency: null // will be set below
-                }
-            }
-        };
-
-        // Send to background script / service worker
-        const messagingStartTime = performance.now();
-        if (navigator.serviceWorker.controller) { //Checks if a service worker controls this page/tab.
-            try {
-                await navigator.serviceWorker.controller.postMessage({
-                    type: 'PERIODIC_STATS',
-                    tabID: window.name,
-                    data: stats
-                });
-
-                const messagingLatency = performance.now() - messagingStartTime;
-                stats.browserMetrics.performance.reportingLatency = messagingLatency;
-
-                this.browserMetrics.performance.messagingLatency.push({
-                    timestamp: now,
-                    latency: messagingLatency
-                });
-            } catch (error) {
-                console.warn('Failed to send stats to service worker:', error);
-            }
-        }
-
-        // Log reporting time
-        const reportingTime = performance.now() - reportingStartTime;
-        this.browserMetrics.performance.reportingTimes.push({
-            timestamp: now,
-            reportingTime
-        });
-
-        // Trim large arrays
-        this.limitArraySize(this.browserMetrics.performance.eventProcessingTimes, 1000);
-        this.limitArraySize(this.browserMetrics.performance.reportingTimes, 100);
-        this.limitArraySize(this.browserMetrics.performance.messagingLatency, 100);
-        this.limitArraySize(this.browserMetrics.interactionPatterns.clickPositions, 500);
-        this.limitArraySize(this.browserMetrics.interactionPatterns.keyboardActivity, 500);
-        this.limitArraySize(this.browserMetrics.interactionPatterns.mouseMovements, 500);
-        this.limitArraySize(this.browserMetrics.engagement.interactionFrequency, 100);
-
-        // Reset counters for next reporting window
-        this.resetCounters();
-    }
-
-    limitArraySize(array, maxSize) {
-        while (array.length > maxSize) {
-            array.shift();
-        }
-    }
-
-    calculateMean(values) {
-        if (!values || values.length === 0) return 0;
-        return values.reduce((sum, val) => sum + val, 0) / values.length;
-    }
-
-    //Get comprehensive browser integration metrics
-    getBrowserMetrics() {
-        return {
-            eventCapture: { ...this.browserMetrics.eventCapture },
-            performance: {
-                eventProcessing: {
-                    totalOperations: this.browserMetrics.performance.eventProcessingTimes.length,
-                    averageTime: this.calculateMean(
-                        this.browserMetrics.performance.eventProcessingTimes.map(e => e.time)
-                    ),
-                    byEventType: this.groupEventProcessingByType()
-                },
-                reporting: {
-                    totalReports: this.browserMetrics.performance.reportingTimes.length,
-                    averageTime: this.calculateMean(
-                        this.browserMetrics.performance.reportingTimes.map(r => r.reportingTime)
-                    )
-                },
-                messaging: {
-                    totalMessages: this.browserMetrics.performance.messagingLatency.length,
-                    averageLatency: this.calculateMean(
-                        this.browserMetrics.performance.messagingLatency.map(m => m.latency)
-                    )
-                }
-            },
-            interactionPatterns: {
-                scrollPatternAnalysis: this.analyzeScrollPatterns(),
-                clickPatternAnalysis: this.analyzeClickPatterns(),
-                keyboardPatternAnalysis: this.analyzeKeyboardPatterns(),
-                mouseMovementAnalysis: this.analyzeMouseMovements()
-            },
-            engagement: {
-                interactionFrequency: [...this.browserMetrics.engagement.interactionFrequency]
-            }
-        };
-    }
-
-    groupEventProcessingByType() {
-        const grouped = {};
-        this.browserMetrics.performance.eventProcessingTimes.forEach(event => {
-            if (!grouped[event.type]) {
-                grouped[event.type] = [];
-            }
-            grouped[event.type].push(event.time);
-        });
-
-        // Calculate statistics for each event type
-        Object.keys(grouped).forEach(type => {
-            const times = grouped[type];
-            grouped[type] = {
-                count: times.length,
-                average: this.calculateMean(times),
-                min: Math.min(...times),
-                max: Math.max(...times)
-            };
-        });
-
-        return grouped;
-    }
-
-    analyzeScrollSpeeds() {
-        const speeds = this.browserMetrics.interactionPatterns.scrollSpeeds;
-        if (speeds.length === 0) return null;
-
-        const speedValues = speeds.map(s => Math.abs(s.speed)); // absolute speeds
-
-        return {
-            totalScrollEvents: speeds.length,
-            averageSpeed: this.calculateMean(speedValues),  // avg scroll speed (pixels/sec)
-            maxSpeed: Math.max(...speedValues),
-            minSpeed: Math.min(...speedValues),
-            scrollFrequency: speeds.length / ((Date.now() - this.startTime) / 1000)  // scrolls per second
-        };
-    }
-
-    analyzeClickPatterns() {
-        const positions = this.browserMetrics.interactionPatterns.clickPositions;
-        if (positions.length === 0) return null;
-
-        return {
-            totalClicks: positions.length,
-            averageX: this.calculateMean(positions.map(p => p.x)),
-            averageY: this.calculateMean(positions.map(p => p.y)),
-            clickFrequency: positions.length / ((Date.now() - this.startTime) / 1000),
-            elementDistribution: this.countElementTypes(positions)
-        };
-    }
-
-    analyzeKeyboardPatternsAdvanced() {
-        const activity = this.browserMetrics.interactionPatterns.keyboardActivity;
-        const keyUpActivity = this.browserMetrics.interactionPatterns.keyboardKeyUpActivity || [];
-
-        if (activity.length === 0) return null;
-
-        // 1. Key Code Distribution
-        const keyCodeFrequency = {};
-        for (const entry of activity) {
-            keyCodeFrequency[entry.code] = (keyCodeFrequency[entry.code] || 0) + 1;
-        }
-
-        // 2. Typing Speed / Burstiness (inter-keystroke intervals)
-        const intervals = [];
-        for (let i = 1; i < activity.length; i++) {
-            intervals.push(activity[i].timestamp - activity[i-1].timestamp);
-        }
-        const avgInterval = intervals.length ? this.calculateMean(intervals) : null;
-
-        // 3. Error Patterns: count Backspace/Delete usage
-        const errorCount = (keyCodeFrequency['Backspace'] || 0) + (keyCodeFrequency['Delete'] || 0);
-
-        // 4. Key Hold Durations (match keydown and keyup by code)
-        // Build maps from code to timestamps for keydown and keyup events
-        const holdDurations = [];
-        const downMap = new Map(); // code -> stack of down timestamps
-
-        for (const downEvent of activity) {
-            if (!downMap.has(downEvent.code)) downMap.set(downEvent.code, []);
-            downMap.get(downEvent.code).push(downEvent.timestamp);
-        }
-
-        // For each keyup, try to match with the earliest unmatched keydown timestamp
-        for (const upEvent of keyUpActivity) {
-            const stack = downMap.get(upEvent.code);
-            if (stack && stack.length > 0) {
-                const downTime = stack.shift();
-                const duration = upEvent.timestamp - downTime;
-                if (duration >= 0) holdDurations.push(duration);
-            }
-        }
-        const avgHoldDuration = holdDurations.length ? this.calculateMean(holdDurations) : null;
-
-        // 5. Special Key Usage (Enter, Arrow keys)
-        const specialKeys = ['Enter', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'];
-        const specialKeyUsage = {};
-        for (const key of specialKeys) {
-            specialKeyUsage[key] = keyCodeFrequency[key] || 0;
-        }
-
-        // Total keystrokes & frequency
-        const totalKeystrokes = activity.length;
-        const timeOnPageSec = (Date.now() - this.startTime) / 1000;
-        const keystrokeFrequency = totalKeystrokes / timeOnPageSec;
-
-        return {
-            totalKeystrokes,
-            keystrokeFrequency,
-            keyCodeFrequency,
-            averageInterKeystrokeIntervalMs: avgInterval,
-            errorKeyCount: errorCount,
-            averageKeyHoldDurationMs: avgHoldDuration,
-            specialKeyUsage
-        };
-    }
-
-    analyzeMouseMovements() {
-        const movements = this.browserMetrics.interactionPatterns.mouseMovements;
-        if (movements.length === 0) return null;
-
-        const distances = movements.map(m => m.distance);
-        return {
-            totalMovements: movements.length,
-            averageDistance: this.calculateMean(distances),
-            totalDistance: distances.reduce((sum, d) => sum + d, 0),
-            movementFrequency: movements.length / ((Date.now() - this.startTime) / 1000)
-        };
-    }
-
-    countElementTypes(positions) {
-        const counts = {};
-        positions.forEach(pos => {
-            counts[pos.element] = (counts[pos.element] || 0) + 1;
-        });
-        return counts;
-    }
-
-    // Public methods for external access
-    getCurrentStats() {
-        return {
-            timeOnPage: Date.now() - this.startTime,
-            scrollCount: this.scrollCount,
-            clickCount: this.clickCount,
-            keystrokes: this.keystrokes,
-            isVisible: this.isPageVisible,
-            activityScore: this.calculateActivityScore(),
-            engagementLevel: this.calculateEngagementLevel(),
-            
-            browserMetrics: this.getBrowserMetrics()
-        };
-    }
-
-    calculateActivityScore() {
-        // Simple activity score: weighted sum of scrolls, clicks, keystrokes per minute
-        const now = Date.now();
-        const minutes = Math.max((now - this.startTime) / 60000, 1);
-        const score = (this.scrollCount + this.clickCount + this.keystrokes) / minutes;
-        return Math.round(score * 10) / 10; // One decimal place
-    }
-
-    /**
-     * Record a user activity event for metrics and reporting.
-     * @param {string} type - The type of activity (e.g., 'scroll', 'click', etc.)
-     * @param {object} [details] - Optional details about the activity.
-     */
-    recordActivity(type, details = {}) {
-        const activity = {
-            type,
-            timestamp: Date.now(),
-            ...details
-        };
-        this.activityBuffer.push(activity);
-        this.lastActivityTime = activity.timestamp;
-        // Optionally, keep buffer size manageable
-        if (this.activityBuffer.length > 500) {
-            this.activityBuffer.shift();
-        }
-    }
-
-    reportFinalStats() {
-        // Report final stats before unload (similar to reportPeriodicStats)
-        const now = Date.now();
-        const timeOnPage = now - this.startTime;
-        const timeSinceLastActivity = now - this.lastActivityTime;
-        const interactionCount = this.scrollCount + this.clickCount + this.keystrokes;
-        const interactionFrequency = interactionCount / (timeOnPage / 1000);
-        const stats = {
-            url: window.location.href,
-            hostname: window.location.hostname,
-            timeOnPage,
-            timeSinceLastActivity,
-            scrollCount: this.scrollCount,
-            clickCount: this.clickCount,
-            keystrokes: this.keystrokes,
-            isVisible: this.isPageVisible,
-            activityScore: this.calculateActivityScore(),
-            timestamp: now,
-            browserMetrics: {
-                eventCapture: { ...this.browserMetrics.eventCapture },
-                performance: { ...this.browserMetrics.performance },
-                interactionPatterns: { ...this.browserMetrics.interactionPatterns },
-                engagement: { ...this.browserMetrics.engagement }
-            }
-        };
-        // Send to background or log
-        try {
-            chrome.runtime.sendMessage({ action: 'finalStats', stats });
-        } catch (e) {
-            console.warn('Failed to send final stats:', e);
-        }
-    }
+  }
 }
 
-// Initialize the monitor
+/* ───────────────────── Global instance & messaging ────────────── */
 const pageActivityMonitor = new PageActivityMonitor();
-
-// Make it globally accessible for debugging
 window.pageActivityMonitor = pageActivityMonitor;
 
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    if (message.action === 'getPageStats') {
-        sendResponse(pageActivityMonitor.getCurrentStats());
-    } else if (message.action === 'resetPageStats') {
-        pageActivityMonitor.resetCounters();
-        sendResponse({ success: true });
-    } else if (message.action === 'getBrowserMetrics') {
-        sendResponse(pageActivityMonitor.getBrowserMetrics());
-    }
-    return true; // Indicates async response if needed
+/* Popup / background requests */
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  switch (msg.action) {
+    case 'getPageStats':       sendResponse(pageActivityMonitor.getCurrentStats()); break;
+    case 'getBrowserMetrics':  sendResponse(pageActivityMonitor.getBrowserMetrics()); break;
+    case 'resetPageStats':     pageActivityMonitor.resetCounters(); sendResponse({ success: true }); break;
+    case 'getActivityScore':   sendResponse({ score: pageActivityMonitor.calculateActivityScore() }); break;
+    case 'pauseMonitoring':    pageActivityMonitor.stopMonitoring(); sendResponse({ success: true }); break;
+    case 'resumeMonitoring':   pageActivityMonitor.resumeMonitoring(); sendResponse({ success: true }); break;
+    case 'updateSettings':     pageActivityMonitor.updateSettings(msg.settings); sendResponse({ success: true }); break;
+    default: return; // unrecognised
+  }
+  return true; // allow async
 });
 
-console.log('🔍 Content script loaded for comprehensive page activity monitoring and research metrics');
+console.log('🔍 Content script loaded – comprehensive page-activity monitoring active.');
