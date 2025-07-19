@@ -1,229 +1,228 @@
-/**
- * Classes: 0=productive, 1=non-productive, 2=overuse
- */
+'use strict';
 
-const { HoeffdingNode } = require('./hoeffding-node.js');
+const HoeffdingNode = require('./hoeffding-node.js');
 const ADWIN = require('./adwin.js');
-const CircularBuffer = require('.utils/circular-buffer.js');
+const CircularBuffer = require('./utils/circular-buffer.js');
 
 class HoeffdingTree {
-  constructor(options = {}) {
-    // Hyperparameters
-    this.gracePeriod = options.gracePeriod || 200;
-    this.hoeffdingBound = options.hoeffdingBound || 0.05;
-    this.numClasses = 3;
-    this.classLabels = ['productive', 'non-productive', 'overuse'];
+  /**
+   * @param {Object} opts
+   * @param {number} opts.nFeatures - required
+   * @param {number} [opts.nClasses=3]
+   * @param {string[]} [opts.classLabels]
+   * @param {number} [opts.gracePeriod=200]
+   * @param {number} [opts.delta=0.05]
+   * @param {number} [opts.feedbackWeight=2]
+   * @param {number} [opts.cacheSize=1024]
+   * @param {number} [opts.bufferMax=10000]
+   * @param {number} [opts.historySize=500]
+   * @param {number} [opts.structureHistorySize=100]
+   * @param {number} [opts.adwinDelta=0.002]
+   */
+  constructor(opts = {}) {
+    if (!Number.isInteger(opts.nFeatures) || opts.nFeatures <= 0)
+      throw new Error('nFeatures must be a positive integer');
 
-    // State
-    this.root = new HoeffdingNode();
+    // core parameters
+    this.nFeatures = opts.nFeatures;
+    this.numClasses = opts.nClasses ?? 3;
+    this.classLabels =
+      opts.classLabels ?? ['productive', 'non-productive', 'overuse'];
+
+    this.gracePeriod = opts.gracePeriod ?? 200;
+    this.delta = opts.delta ?? 0.05;
+    this.feedbackWeight = opts.feedbackWeight ?? 3.5;
+
+    this.cacheSize = opts.cacheSize ?? 1024;
+    this.bufferMax = opts.bufferMax ?? 10000;
+
+    // root node
+    this.root = new HoeffdingNode({
+      nClasses: this.numClasses,
+      nFeatures: this.nFeatures,
+      cacheSize: this.cacheSize,
+      bufferMax: this.bufferMax
+    });
+
+    // online statistics
     this.instancesSeen = 0;
     this.driftCount = 0;
+    this.splitCount = 0;
 
-    // Sliding‐window performance monitoring
-    const histSize = options.historySize || 500;
-    this.accuracyHistory = new CircularBuffer(histSize);
-    this.errorRateHistory = new CircularBuffer(histSize);
-    this.timestamps = new CircularBuffer(histSize);
+    // fixed-size history
+    const hSize = opts.historySize ?? 500;
+    this.accuracyHistory = new CircularBuffer(hSize);
+    this.errorRateHistory = new CircularBuffer(hSize);
+    this.timestamps = new CircularBuffer(hSize);
+    this.treeHistory = new CircularBuffer(opts.structureHistorySize ?? 100);
 
-    // Tree snapshots for visualization
-    this.treeHistory = new CircularBuffer(options.structureHistorySize || 100);
+    // drift detector
+    this.driftDetector = new ADWIN({ delta: opts.adwinDelta ?? 0.002 });
 
-    // Node statistics with eviction
-    this.nodeStatistics = new Map();
-    this.maxNodeStats = options.maxNodeStats || 1000;
-
-    // Drift detector (ADWIN only)
-    this.driftDetector = new ADWIN({ delta: options.adwinDelta || 0.002 });
-
-    // User-feedback buffer
+    // batched user feedback
     this.userFeedbackBuffer = [];
-    this.feedbackWeight = options.feedbackWeight || 2.0;
+    this.feedbackBatchSize = this.gracePeriod;
   }
 
-  // Train/update with one instance
-  update(features, actualClass, userFeedback = null) {
+  /* ------------------------ public API ------------------------- */
+
+  /**
+   * Incremental training.
+   * @param {number[]} features
+   * @param {number} actualClass
+   * @param {{classValue:number,confidence?:number}|null} feedback
+   */
+  train(features, actualClass, feedback = null) {
+    // basic validation
+    if (!Array.isArray(features) || features.length !== this.nFeatures)
+      throw new Error(`Expected ${this.nFeatures} features`);
+    if (actualClass < 0 || actualClass >= this.numClasses)
+      throw new Error('Invalid class label');
+
     this.instancesSeen++;
 
-    // Predict, then update performance
-    const prediction = this._predictLeaf(features);
-    const isCorrect = prediction.prediction === actualClass;
-
-    // Record performance
-    this.accuracyHistory.push(isCorrect ? 1 : 0);
-    this.errorRateHistory.push(isCorrect ? 0 : 1);
+    /* 1. prediction & accuracy */
+    const pred = this._predictLeaf(features);
+    const correct = pred.prediction === actualClass;
+    this.accuracyHistory.push(correct ? 1 : 0);
+    this.errorRateHistory.push(correct ? 0 : 1);
     this.timestamps.push(Date.now());
 
-    // Integrate user feedback if provided
-    if (userFeedback !== null) {
-      this._incorporateUserFeedback(features, actualClass, userFeedback);
+    /* 2. buffer external feedback */
+    if (feedback) {
+      this.userFeedbackBuffer.push({
+        features: [...feedback.features ?? features],
+        correction: feedback.classValue,
+        confidence: feedback.confidence ?? 1.0
+      });
     }
+    if (this.userFeedbackBuffer.length >= this.feedbackBatchSize)
+      this._flushFeedback();
 
-    // Drift detection
-    this.driftDetector.update(isCorrect ? 0 : 1);
-    if (this.driftDetector.drift) {
-      this._handleDrift();
-    }
+    /* 3. concept-drift monitoring */
+    this.driftDetector.update(correct ? 0 : 1);
+    if (this.driftDetector.drift) this._handleDrift();
 
-    // Grow tree
+    /* 4. tree update with ground-truth */
     this._updateTree(features, actualClass);
 
-    // Snapshot structure periodically
-    if (this.instancesSeen % (options.snapshotInterval || 50) === 0) {
-      this._captureTreeStructure();
-    }
+    /* 5. periodic snapshot */
+    if (this.instancesSeen % 300 === 0) this._snapshot();
 
     return {
       updated: true,
       drift: this.driftDetector.drift,
-      accuracy: this._recentAccuracy(),
-      treeDepth: this._getTreeDepth(this.root),
+      recentAccuracy: this._recentAccuracy(),
+      instancesSeen: this.instancesSeen,
+      splitCount: this.splitCount,      
+      driftCount: this.driftCount
     };
   }
 
-  // Internal prediction: returns leaf and distribution
-  _predictLeaf(features) {
+  /** Predict class label only (no stats updated) */
+  predict(features) {
     const leaf = this.root.findLeaf(features);
     const dist = leaf.getClassDistribution();
-    let maxVotes = -Infinity, maxClass = 0, total = dist.reduce((s, v) => s + v, 0);
-    for (let i = 0; i < this.numClasses; i++) {
-      if ((dist[i] || 0) > maxVotes) {
-        maxVotes = dist[i];
-        maxClass = i;
+    const total = dist.reduce((a, b) => a + b, 0);
+    let best = 0,
+      maxVotes = -1;
+    dist.forEach((cnt, idx) => {
+      if (cnt > maxVotes) {
+        maxVotes = cnt;
+        best = idx;
       }
-    }
-    const probs = total > 0 ? dist.map(v => v/total) : Array(this.numClasses).fill(1/this.numClasses);
+    });
     return {
-      prediction: maxClass,
-      confidence: total > 0 ? maxVotes/total : 1/this.numClasses,
-      classDistribution: probs,
-      classLabel: this.classLabels[maxClass],
-      timestamp: Date.now(),
-      nodeId: leaf.id,
-      features: [...features]
+      prediction: best,
+      confidence: total ? maxVotes / total : 0,
+      classLabel: this.classLabels[best]
     };
   }
 
-  // Main tree update logic
-  _updateTree(features, classLabel) {
-    const leaf = this.root.findLeaf(features);
-    leaf.updateStats(features, classLabel);
-    if (leaf.shouldSplit(this.gracePeriod, this.hoeffdingBound)) {
-      const split = leaf.findBestSplit(this.hoeffdingBound);
-      if (split) {
-        leaf.splitFeature = split.feature;
-        leaf.splitValue = split.value;
-        leaf.leftChild = new HoeffdingNode();
-        leaf.rightChild = new HoeffdingNode();
-        leaf.redistributeInstances();
-      }
-    }
-  }
-
-  // Capture and buffer current tree structure
-  _captureTreeStructure() {
-    const snapshot = {
-      timestamp: Date.now(),
-      instancesSeen: this.instancesSeen,
-      treeDepth: this._getTreeDepth(this.root),
-      leafCount: this._getLeafCount(this.root),
-      structure: this.root.toJSON()
-    };
-    this.treeHistory.push(snapshot);
-  }
-
-  // Handle concept drift by partial reset
-  _handleDrift() {
-    this.driftCount++;
-    // Reset statistics on root and replay recent feedback
-    this.root = new HoeffdingNode();
-    const recentFeedback = this.userFeedbackBuffer.slice(-100);
-    for (const fb of recentFeedback) {
-      for (let i = 0; i < Math.ceil(fb.confidence * this.feedbackWeight); i++) {
-        this._updateTree(fb.features, fb.userCorrection);
-      }
-    }
-    this.driftDetector.reset();
-  }
-
-  // Incorporate user feedback into buffer and tree
-  _incorporateUserFeedback(features, actualClass, userFeedback) {
-    const fb = {
-      features: [...features],
-      actualClass,
-      userCorrection: userFeedback.classValue,
-      confidence: userFeedback.confidence || 1.0,
-      timestamp: Date.now()
-    };
-    this.userFeedbackBuffer.push(fb);
-    if (this.userFeedbackBuffer.length > this.gracePeriod) {
-      this.userFeedbackBuffer.shift();
-    }
-    // Immediate update on correction
-    if (fb.userCorrection !== actualClass) {
-      for (let i = 0; i < this.feedbackWeight; i++) {
-        this._updateTree(features, fb.userCorrection);
-      }
-    }
-  }
-
-  // Utility: recent rolling accuracy
-  _recentAccuracy(windowSize = 50) {
-    const arr = this.accuracyHistory.toArray().slice(-windowSize);
-    if (arr.length === 0) return 0;
-    return arr.reduce((s,v) => s+v, 0)/arr.length;
-  }
-
-  // Utility: tree depth
-  _getTreeDepth(node) {
-    if (!node || node.isLeaf()) return 0;
-    return 1 + Math.max(this._getTreeDepth(node.leftChild), this._getTreeDepth(node.rightChild));
-  }
-
-  // Utility: leaf count
-  _getLeafCount(node) {
-    if (!node) return 0;
-    if (node.isLeaf()) return 1;
-    return this._getLeafCount(node.leftChild) + this._getLeafCount(node.rightChild);
-  }
-
-  // Public API endpoints
-  train(features, actualClass, feedback = null) {
-    return this.update(features, actualClass, feedback);
-  }
-
-  predict(features) {
-    return this._predictLeaf(features);
-  }
-
-  getStats() {
-    return {
-      instancesSeen: this.instancesSeen,
-      treeDepth: this._getTreeDepth(this.root),
-      leafCount: this._getLeafCount(this.root),
-      driftCount: this.driftCount,
-      recentAccuracy: this._recentAccuracy(),
-      performanceTimeSeries: {
-        accuracy: this.accuracyHistory.toArray(),
-        errorRate: this.errorRateHistory.toArray(),
-        timestamps: this.timestamps.toArray()
-      },
-      treeHistory: this.treeHistory.toArray()
-    };
-  }
-
+  /** Export complete tree and meta-data to JSON string */
   exportModel() {
     return JSON.stringify({
       root: this.root.toJSON(),
       instancesSeen: this.instancesSeen,
-      driftCount: this.driftCount
+      driftCount: this.driftCount,
+      hyperparameters: {
+        gracePeriod: this.gracePeriod,
+        delta: this.delta,
+        nFeatures: this.nFeatures,
+        nClasses: this.numClasses,
+        feedbackWeight: this.feedbackWeight,
+        cacheSize: this.cacheSize,
+        bufferMax: this.bufferMax
+      }
     });
   }
 
-  loadModel(modelJson) {
-    const data = JSON.parse(modelJson);
+  /** Restore from JSON string */
+  loadModel(json) {
+    const data = JSON.parse(json);
     this.root = HoeffdingNode.fromJSON(data.root);
-    this.instancesSeen = data.instancesSeen;
-    this.driftCount = data.driftCount;
+    this.instancesSeen = data.instancesSeen ?? 0;
+    this.driftCount = data.driftCount ?? 0;
+  }
+
+  /* -------------------- internal utilities -------------------- */
+
+  _predictLeaf(features) {
+    const leaf = this.root.findLeaf(features);
+    const dist = leaf.getClassDistribution();
+    const total = dist.reduce((a, b) => a + b, 0);
+    let cls = 0,
+      votes = -1;
+    dist.forEach((c, i) => {
+      if (c > votes) {
+        votes = c;
+        cls = i;
+      }
+    });
+    return { prediction: cls };
+  }
+
+  _updateTree(features, classLabel) {
+    const leaf = this.root.findLeaf(features);
+    leaf.updateStats(features, classLabel);
+
+    if (leaf.shouldSplit(this.gracePeriod, this.delta)) {
+      if (leaf.split()) this.splitCount++;
+    }
+  }
+
+  _flushFeedback() {
+    const batch = this.userFeedbackBuffer.splice(0);
+    batch.forEach(fb => {
+      for (let i = 0; i < Math.ceil(this.feedbackWeight * fb.confidence); i++) {
+        this._updateTree(fb.features, fb.correction);
+      }
+    });
+  }
+
+  _handleDrift() {
+    // reset the whole tree after drift
+    this.root = new HoeffdingNode({
+      nClasses: this.numClasses,
+      nFeatures: this.nFeatures,
+      cacheSize: this.cacheSize,
+      bufferMax: this.bufferMax
+    });
+    this.driftDetector.reset();
+    this.driftCount++;
+  }
+
+  _snapshot() {
+    try {
+      this.treeHistory.push(this.root.toJSON());
+    } catch (e) {
+      // ignore serialisation errors
+    }
+  }
+
+  _recentAccuracy() {
+    const arr = this.accuracyHistory.toArray();
+    return arr.length ? arr.reduce((s, v) => s + v, 0) / arr.length : null;
   }
 }
 

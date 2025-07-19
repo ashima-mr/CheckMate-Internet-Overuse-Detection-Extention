@@ -220,9 +220,18 @@
         }
       };
 
+      const vector = Float64Array.from([
+        this.scrolls,                               // v1
+        this.clicks,                                // v2
+        this.keydowns + this.keyups,                // v3
+        this.mouseMoves,                            // v4
+        stats.interactionFrequency,                 // v5
+        stats.timeSinceLastMs                       // v6
+      ]);
+
       /* send and record latency */
       const sendT0 = performance.now();
-      this._postMessage({ type: 'BATCH_STATS', data: stats });
+      this._postMessage({ type: 'BATCH_STATS', data: stats, mspcVector : vector.buffer });
       this.msgLatency.push({ ts: now, latency: performance.now() - sendT0 });
 
       /* perf bookkeeping */
@@ -254,8 +263,27 @@
           engagement    : this.engageBuf.toArray()
         }
       };
-      try { chrome.runtime.sendMessage({ action: 'finalStats', stats }); }
-      catch (e) { console.warn('finalStats send failed', e); }
+      // Build an MSPC‐compatible 6‐dim vector if desired
+      const vector = Float64Array.from([
+        this.scrolls,
+        this.clicks,
+        this.keydowns + this.keyups,
+        this.mouseMoves,
+        stats.interactionFrequency || 0,
+        stats.timeSinceLastMs
+      ]);
+
+      // Send via postMessage so FeatureEngineer.ingest() handles it identically
+      const msg = {
+        type: 'FINAL_STATS',
+        data: stats,
+        mspcVector: vector.buffer,
+        isFinal: true
+      };
+
+      const sw = navigator.serviceWorker.controller;
+      if (sw) sw.postMessage(msg);
+      else console.warn('SW not ready, finalStats dropped');
     }
 
     /* --------------------- analytics / utilities --------------------- */
