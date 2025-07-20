@@ -3,7 +3,7 @@
 const {
   calculateEntropy,
   HoeffdingBound
-} = require('./utils/entropy-hoeffdingBound.js');
+} = require('../utils/entropy-hoeffdingBound.js');
 
 /**
  * Internal helper – binary-search insertion index.

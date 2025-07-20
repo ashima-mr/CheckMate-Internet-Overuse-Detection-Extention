@@ -2,7 +2,7 @@
 
 const HoeffdingNode = require('./hoeffding-node.js');
 const ADWIN = require('./adwin.js');
-const CircularBuffer = require('./utils/circular-buffer.js');
+const CircularBuffer = require('../utils/circular-buffer.js');
 
 class HoeffdingTree {
   /**

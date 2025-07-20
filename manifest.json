@@ -20,7 +20,7 @@
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["src/content/content-script.js"],
+      "js": ["src/utils/circular-buffer.js", "src/content/content-script.js", "src/analysis/metrics.js"],
       "run_at": "document_start"
     }
   ],

@@ -20,9 +20,10 @@
 'use strict';
 
 /* --------- imports ------------------------------------------------------- */
-import CircularBuffer from './utils/circular-buffer.js';
-import HoeffdingTree  from './models/hoeffding-tree.js';
-import { MSPC }       from './models/mspc.js';
+import CircularBuffer from '../utils/circular-buffer.js';
+import HoeffdingTree  from '../models/hoeffding-tree.js';
+import { MSPC }       from '../models/mspc.js';
+import { OnlineScaler } from '../utils/online-scaler.js'
 
 /* --------- constants ----------------------------------------------------- */
 const REPORT_PERIOD_MS = 30_000;             // must match content-script
@@ -40,21 +41,6 @@ const FEATURE_LAYOUT = [
 ];
 const FEATURE_COUNT = FEATURE_LAYOUT.length;
 
-/*   empirical caps used for simple min-max normalisation */
-const CAP = {
-  rate     : 200,         // interactions / min
-  freqSec  : 5,           // interactions / s
-  timeMs   : 300_000,     // 5 min idle
-  activity : 100,         // activityScore calc
-  domains  : 20
-};
-
-/* --------- helper – cheap clamp ----------------------------------------- */
-const clamp01 = v => v < 0 ? 0 : v > 1 ? 1 : v;
-
-/* =========================================================================
-   CLASS
-   =========================================================================*/
 export default class FeatureEngineer {
   /* ------------------------------------------------- ctor -------------- */
   constructor (opts = {}) {
@@ -70,6 +56,10 @@ export default class FeatureEngineer {
     this.tree = new HoeffdingTree({ nFeatures: FEATURE_COUNT });
     this.mspc = new MSPC(6);                        // scroll, clicks … timeSince
 
+    // per-feature online z-score scalers
+    this.scalers = Array.from({ length: FEATURE_COUNT },
+    () => new OnlineScaler( /* optional decay α=*/0.01 ));
+
     /* allow UI → feedback */
     this._pendingFeedback = new Map();
   }
@@ -82,12 +72,12 @@ export default class FeatureEngineer {
 
     switch (msg.type || msg.action) {
       case 'BATCH_STATS':      /* periodic every 30 s */
-        this._handlePeriodic(msg.data, msg.mspcVector);
+        this._handlePeriodic(msg.data, msg.mspcVector, false);
         break;
 
       case 'FINAL_STATS':       /* tab unload */
         // treat as one last periodic report, then mark session closed
-        this._handlePeriodic(msg.data, msg.mspcVector, /*isFinal=*/true);
+        this._handlePeriodic(msg.data, msg.mspcVector, true);
         break;
 
       /* optional extra messages (visibility, …) are ignored here */
@@ -101,16 +91,15 @@ export default class FeatureEngineer {
     this._pendingFeedback.get(tabID).push({ classValue, confidence });
   }
 
-  /** convenience – latest prediction for a tab */
-  latestPrediction (tabID) {
-    const s = this.sessions.get(tabID);
-    return s?.lastVec ? this.tree.predict(s.lastVec) : null;
-  }
-
   /* ================================================= INTERNAL ========= */
 
   /* --------------------------- periodic message ----------------------- */
-  _handlePeriodic (d, vecBuf) {
+  _handlePeriodic (d, vecBuf, isFinal) {
+    if (!d?.interactionCounts) {
+        console.warn('Malformed telemetry:', d);
+        return;
+    }
+
     /* lazy-create session entry */
     const s = this.sessions.get(d.tabID) ??
               this._newSession(d.tabID, d.domain);
@@ -136,12 +125,14 @@ export default class FeatureEngineer {
     if (fbQ?.length) {
       const fb = fbQ.shift();                          // consume 1 feedback
       this.tree.train(feat, fb.classValue, { classValue: fb.classValue, confidence: fb.confidence });
-    } else {
-      this.tree.train(feat, 1);                        // unlabeled = neutral
     }
 
     /* 2) MSPC anomaly on raw 6-var vector (scrolls … timeSince) */
     if (vecBuf) this.mspc.ingest(new Float64Array(vecBuf));
+
+    if (isFinal) {
+        this._handleFinal({ tabID: d.tabID, browserMetrics: d.browserMetrics, ts: d.ts });
+    }
   }
 
   /* --------------------------- final tab stats ----------------------- */
@@ -157,41 +148,39 @@ export default class FeatureEngineer {
 
   /* --------------------------- build vector -------------------------- */
   _buildFeatureVector (s, d, vecBuf) {
+    // raw feature computation (no caps)
+    const perMinRaw = cnt => (cnt * 2);
+    const scrollRate      = perMinRaw(d.interactionCounts.scrolls);
+    const clickRate       = perMinRaw(d.interactionCounts.clicks);
+    const keyRate         = perMinRaw(d.interactionCounts.keystrokes);
+    const moveRate        = perMinRaw(d.interactionCounts.mouseMoves);
+    const freq            = d.interactionFrequency;
+    const vis             = d.isVisible ? 1 : 0;
 
-    /* rate per minute from 30-s counts */
-    const perMin = cnt => clamp01((cnt * 2) / CAP.rate);
-
-    const scrollRate = perMin(d.interactionCounts.scrolls);
-    const clickRate  = perMin(d.interactionCounts.clicks);
-    const keyRate    = perMin(d.interactionCounts.keystrokes);
-    const moveRate   = perMin(d.interactionCounts.mouseMoves);
-
-    const freq  = clamp01(d.interactionFrequency / CAP.freqSec);
-    const vis   = d.isVisible ? 1 : 0;
-
-    /* unpack 6-len Float64 MSPC vector (periodic raw) */
+    // unpack MSPC raw vector
     let spc = [0,0,0,0,0,0];
     if (vecBuf instanceof ArrayBuffer) {
         if (vecBuf.byteLength === 6 * 8) {
-            spc = Array.from(new Float64Array(vecBuf))
-                    .map(v => clamp01(Math.abs(v) / CAP.rate));
-         }
+            spc = Array.from(new Float64Array(vecBuf));
+        }
     }
 
-    const idle  = clamp01(d.timeSinceLastMs / CAP.timeMs);
-    const act   = clamp01((d.activityScore ?? 0) / CAP.activity);
-    const dom   = clamp01(s.domains.size / CAP.domains);
+    const idle            = d.timeSinceLastMs;
+    const act             = (d.activityScore ?? 0);
+    const dom             = s.domains.size;
+    const duration        = Date.now() - s.startTime;
+    const focusRatio      = duration > 0 ? s.focusMs / duration : 0;
 
-    /* focus ratio: approximate from isVisible × 30 s intervals */
-    const duration = Date.now() - s.startTime;
-    const focusRatio = clamp01(duration > 0 ? s.focusMs / duration : 0);
-
-    return [
+    // assemble raw feature array
+    const rawFeatures = [
       scrollRate, clickRate, keyRate, moveRate,
       freq, vis,
       ...spc,
       idle, act, dom, focusRatio
     ];
+
+    // apply streaming z-score normalization per dimension
+    return rawFeatures.map((x,i) => this.scalers[i].normalize(x));
   }
 
   /* --------------------------- per-session helpers ------------------- */

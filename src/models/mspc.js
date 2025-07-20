@@ -2,8 +2,8 @@
    Incremental Hotelling T² multivariate SPC
 --------------------------------------------------------- */
 
-import { CircularBuffer } from './utils/circular-buffer.js';
-import { cholUpdate, cholDowndate, solveCholesky } from './utils/linear-algebra.js';
+import { CircularBuffer } from '../utils/circular-buffer.js';
+import { cholUpdate, cholDowndate, solveCholesky } from '../utils/linear-algebra.js';
 
 // --- CONFIG ------------------------------------------------
 const ALPHA = 0.001;                 // 0.1 % false alarm
