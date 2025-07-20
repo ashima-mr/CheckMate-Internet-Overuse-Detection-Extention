@@ -27,8 +27,10 @@
    "web_accessible_resources": [
     {
       "resources": [
-        "src/utils/circular-buffer.js",
-        "src/ml/*.js",
+        "src/utils/*.js",
+        "src/workers/*.js",
+        "src/analysis/*.js",
+        "src/models/*.js",
         "src/popup/lib/*.js", 
         "src/popup/*.css",
         "src/popup/*.html",
