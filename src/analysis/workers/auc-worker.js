@@ -14,7 +14,29 @@ class AUCCalculator {
     }
 
     const n = predictions.length;
-    if (n === 0) return 0.5;
+    if (n === 0) {
+        return {
+      auc: undefined,
+      message: 'Empty prediction set',
+      rocPoints: [],
+      nSamples: 0,
+      nPositive: 0,
+      nNegative: 0
+    };}
+
+    const nPositive = labels.filter(l => l === 1).length;
+    const nNegative = n - nPositive;
+
+    if (nPositive === 0 || nNegative === 0) {
+        return {
+        auc: undefined,
+        message: 'AUC is undefined because all labels are the same class',
+        rocPoints: [],
+        nSamples: n,
+        nPositive,
+        nNegative
+        };
+    }
 
     // Create pairs and sort by prediction score (descending)
     const pairs = predictions.map((pred, i) => ({ pred, label: labels[i], index: i }));
@@ -30,8 +52,8 @@ class AUCCalculator {
       auc,
       rocPoints,
       nSamples: n,
-      nPositive: labels.filter(l => l === 1).length,
-      nNegative: labels.filter(l => l === 0).length
+      nPositive,
+      nNegative
     };
   }
 
@@ -116,7 +138,7 @@ class AUCCalculator {
         fp++;
       }
 
-      const precision = tp / (tp + fp);
+      const precision = tp + fp > 0 ? tp / (tp + fp) : 1.0;
       const recall = tp / totalPositives;
       
       prPoints.push({ precision, recall, threshold: pairs[i].pred });

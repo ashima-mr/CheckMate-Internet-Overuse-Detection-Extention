@@ -34,7 +34,9 @@ class MetricsProcessor {
     const mean = sum / n;
     
     // Calculate variance and standard deviation
-    const variance = data.reduce((acc, val) => acc + Math.pow(val - mean, 2), 0) / n;
+    const variance = n === 1 
+    ? 0 
+    : data.reduce((acc, val) => acc + Math.pow(val - mean, 2), 0) / n;
     const stdDev = Math.sqrt(variance);
     
     return {
@@ -46,12 +48,26 @@ class MetricsProcessor {
       max: sorted[n - 1],
       variance,
       stdDev,
-      q25: sorted[Math.floor(n * 0.25)],
-      q75: sorted[Math.floor(n * 0.75)],
-      iqr: sorted[Math.floor(n * 0.75)] - sorted[Math.floor(n * 0.25)],
+      q25: this.percentile(sorted, 0.25),
+      q75: this.percentile(sorted, 0.75),
+      iqr: q75 - q25,
       skewness: this.calculateSkewness(data, mean, stdDev),
       kurtosis: this.calculateKurtosis(data, mean, stdDev)
     };
+  }
+
+  percentile(sorted, p) {
+    const n = sorted.length;
+    if (n === 0) return null;
+
+    const rank = (n - 1) * p;
+    const lowerIndex = Math.floor(rank);
+    const upperIndex = Math.ceil(rank);
+    const weight = rank - lowerIndex;
+
+    if (upperIndex >= n) return sorted[lowerIndex];
+
+    return sorted[lowerIndex] * (1 - weight) + sorted[upperIndex] * weight;
   }
 
   calculateSkewness(data, mean, stdDev) {
@@ -104,59 +120,69 @@ class MetricsProcessor {
 
   createAdvancedHistogram(data, bins = 'auto') {
     if (data.length === 0) return null;
-    
+
+    // Cache key depends on data and bins parameter
     const cacheKey = `${JSON.stringify(data)}_${bins}`;
     if (this.histogramCache.has(cacheKey)) {
-      return this.histogramCache.get(cacheKey);
+        return this.histogramCache.get(cacheKey);
     }
-    
-    // Determine optimal number of bins
+
     let numBins = bins;
+
     if (bins === 'auto') {
-      // Sturges' rule
-      numBins = Math.ceil(Math.log2(data.length)) + 1;
-      // Freedman-Diaconis rule (alternative)
-      const stats = this.calculateStatistics(data);
-      const fdBins = Math.ceil((stats.max - stats.min) / (2 * stats.iqr * Math.pow(data.length, -1/3)));
-      numBins = Math.max(1, Math.min(numBins, fdBins));
+        // Sturges' rule
+        const sturgesBins = Math.ceil(Math.log2(data.length)) + 1;
+
+        // Freedman-Diaconis rule, guard against zero iqr
+        const stats = this.calculateStatistics(data);
+        const iqr = stats.iqr;
+        const binWidthFD = iqr === 0 
+        ? 0 // avoid division by zero
+        : 2 * iqr * Math.pow(data.length, -1 / 3);
+
+        const fdBins = binWidthFD === 0 
+        ? sturgesBins // fallback to Sturges if zero width
+        : Math.ceil((stats.max - stats.min) / binWidthFD);
+
+        numBins = Math.max(1, Math.min(sturgesBins, fdBins));
     }
-    
+
     const min = Math.min(...data);
     const max = Math.max(...data);
     const binWidth = (max - min) / numBins;
-    
+
     const histogram = Array(numBins).fill(0).map((_, i) => ({
-      bin: i,
-      min: min + i * binWidth,
-      max: min + (i + 1) * binWidth,
-      count: 0,
-      density: 0,
-      percentage: 0
+        bin: i,
+        min: min + i * binWidth,
+        max: min + (i + 1) * binWidth,
+        count: 0,
+        density: 0,
+        percentage: 0
     }));
-    
-    // Fill histogram
+
+    // Fill histogram bins
     data.forEach(value => {
-      let binIndex = Math.floor((value - min) / binWidth);
-      binIndex = Math.max(0, Math.min(binIndex, numBins - 1));
-      histogram[binIndex].count++;
+        let binIndex = Math.floor((value - min) / binWidth);
+        binIndex = Math.max(0, Math.min(binIndex, numBins - 1));
+        histogram[binIndex].count++;
     });
-    
-    // Calculate density and percentage
+
+    // Calculate density and percentage for each bin
     histogram.forEach(bin => {
-      bin.density = bin.count / (data.length * binWidth);
-      bin.percentage = (bin.count / data.length) * 100;
+        bin.density = bin.count / (data.length * binWidth);
+        bin.percentage = (bin.count / data.length) * 100;
     });
-    
+
     const result = {
-      histogram,
-      binWidth,
-      totalSamples: data.length,
-      statistics: this.calculateStatistics(data)
+        histogram,
+        binWidth,
+        totalSamples: data.length,
+        statistics: this.calculateStatistics(data)
     };
-    
+
     this.histogramCache.set(cacheKey, result);
     return result;
-  }
+    }
 
   detectAnomalies(data, method = 'iqr') {
     const stats = this.calculateStatistics(data);
@@ -174,7 +200,7 @@ class MetricsProcessor {
               index,
               value,
               type: value < lowerBound ? 'low' : 'high',
-              severity: Math.abs(value - stats.median) / stats.stdDev
+              severity: Math.abs(value - stats.median) / (stats.stdDev || 1 )
             });
           }
         });
@@ -183,7 +209,7 @@ class MetricsProcessor {
       case 'zscore':
         const zThreshold = 3;
         data.forEach((value, index) => {
-          const zScore = Math.abs(value - stats.mean) / stats.stdDev;
+          const zScore = Math.abs(value - stats.mean) / (stats.stdDev || 1 );
           if (zScore > zThreshold) {
             anomalies.push({
               index,

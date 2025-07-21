@@ -1,903 +1,897 @@
-/**
- * Enhanced Background Service Worker for Internet Overuse Detection
- * Implements comprehensive metrics collection for research evaluation
- * MODIFIED: Added extensive performance monitoring and metrics collection
- */
-
-// Import required modules using proper importScripts for Manifest V3
-importScripts(
-    '../utils/circular-buffer.js',
-    '../ml/adwin.js',
-    '../ml/hoeffding-tree.js',
-    '../ml/feature-engineer.js',
-    '../ml/spc.js'
-);
-
-class OveruseDetectionService {
-    constructor(settings) {
-        this.isInitialized = false;
-        this.settings = settings;
-        this.featureEngineer = new FeatureEngineer();
-        this.hoeffdingTree = new HoeffdingTree({
-            gracePeriod: 200,
-            hoeffdingBound: this.settings.sensitivity ?? 0.5,
-            driftDetectionMethod: 'ADWIN'
-        });
-        this.spcModel = new StatisticalProcessControl(100, 3);
-        this.userFeedbackQueue = [];
-        this.predictionHistory = [];
-        this.lastNotificationTime = 0;
-        this.notificationCooldown = 30 * 60 * 1000; // 30 minutes
-        this.monitoringInterval = null;
-        this.isPaused = false;
-
-        // ADDED: Comprehensive metrics collection for research evaluation
-        this.performanceMetrics = {
-            // System Performance Analysis metrics
-            inferenceIntervals: [], // For mean inference interval calculation (11.97 ± 4.95 seconds)
-            predictionThroughput: [], // For 300+ predictions/hour tracking
-            memoryUsage: [], // For 3.2MB (64% of 5MB budget) tracking
-            
-            // Feature Extraction Accuracy metrics
-            sessionDurationNormalizations: [], // For 0.0017 ± 0.0004
-            tabSwitchingVelocities: [], // For 0.1618 ± 0.0199
-            domainDiversityScores: [], // For 1.0 perfect score
-            
-            // Technical Achievement Validation
-            featureExtractionTimes: [], // For O(1) performance validation
-            bufferOperationTimes: [], // For circular buffer performance
-            totalFeatureExtractions: 0, // Count of nine behavioral features
-            
-            // ML Model Evaluation
-            classProbabilityHistory: [], // For [0.33, 0.33, 0.34] tracking
-            bootstrapModeInstances: 0, // For <200 training instances
-            driftDetectionEvents: [], // ADWIN drift signals
-            anomalyDetectionEvents: [], // SPC anomaly flags
-            feedbackAdaptations: [], // User feedback processing
-            
-            // Browser Integration metrics
-            eventCaptureStats: {
-                tabSwitches: 0,
-                urlChanges: 0,
-                scrollEvents: 0,
-                clickEvents: 0,
-                focusTransitions: 0
-            },
-            serviceWorkerPerformance: [], // Background processing times
-            classificationTiming: [], // Real-time classification speed
-            
-            // Resource Efficiency
-            computationTimes: [], // Millisecond-level timing
-            browserPerformanceImpact: [], // Performance degradation tracking
-            memoryFootprint: [], // 3.2MB vs 15-30MB comparison
-            
-            // Session tracking
-            sessionStartTime: Date.now(),
-            totalPredictions: 0,
-            evaluationStartTime: Date.now()
-        };
-
-        // ADDED: Memory monitoring interval for continuous tracking
-        this.memoryMonitorInterval = null;
-        this.startMemoryMonitoring();
-    }
-
-    // ADDED: Memory monitoring method for resource efficiency tracking
-    startMemoryMonitoring() {
-        this.memoryMonitorInterval = setInterval(() => {
-            this.collectMemoryMetrics();
-        }, 5000); // Every 5 seconds
-    }
-
-    // ADDED: Collect memory usage metrics
-    async collectMemoryMetrics() {
-        try {
-            // Estimate memory usage (Chrome doesn't provide exact memory API in extensions)
-            const memoryEstimate = this.estimateMemoryUsage();
-            this.performanceMetrics.memoryUsage.push({
-                timestamp: Date.now(),
-                estimated: memoryEstimate,
-                percentage: (memoryEstimate / (5 * 1024 * 1024)) * 100 // Percentage of 5MB budget
-            });
-
-            // Keep only recent memory measurements
-            if (this.performanceMetrics.memoryUsage.length > 100) {
-                this.performanceMetrics.memoryUsage.shift();
-            }
-        } catch (error) {
-            console.warn('Memory metrics collection error:', error);
-        }
-    }
-
-    // ADDED: Estimate memory usage based on data structures
-    estimateMemoryUsage() {
-        let totalSize = 0;
-        
-        // Estimate size of prediction history
-        totalSize += JSON.stringify(this.predictionHistory).length;
-        
-        // Estimate size of performance metrics
-        totalSize += JSON.stringify(this.performanceMetrics).length;
-        
-        // Estimate size of feature engineer data
-        if (this.featureEngineer) {
-            totalSize += JSON.stringify(this.featureEngineer.getSessionStats()).length;
-        }
-        
-        // Estimate size of ML model data
-        if (this.hoeffdingTree) {
-            totalSize += JSON.stringify(this.hoeffdingTree.getStats()).length;
-        }
-        
-        return totalSize;
-    }
-
-    static async create() {
-        const settings = await OveruseDetectionService.loadSettingsFromStorage();
-        const service = new OveruseDetectionService(settings);
-        await service.initialize();
-        return service;
-    }
-
-    static async loadSettingsFromStorage() {
-        return new Promise((resolve) => {
-            chrome.storage.local.get([
-                'enabled',
-                'sensitivity',
-                'notificationsEnabled',
-                'monitoringInterval',
-                'privacyMode',
-                'dataRetentionDays'
-            ], (result) => {
-                resolve({
-                    enabled: result.enabled ?? true,
-                    sensitivity: result.sensitivity ?? 0.5,
-                    notificationsEnabled: result.notificationsEnabled ?? true,
-                    monitoringInterval: result.monitoringInterval ?? 15000,
-                    privacyMode: result.privacyMode ?? false,
-                    dataRetentionDays: result.dataRetentionDays ?? 30
-                });
-            });
-        });
-    }
-
-    async initialize() {
-        try {
-            this.setupEventListeners();
-            if (this.settings.enabled && !this.isPaused) {
-                this.startMonitoring();
-            }
-            // Start feedback notification during bootstrap
-            this.startBootstrapFeedbackNotification();
-            this.isInitialized = true;
-            console.log('✅ Overuse Detection Service initialized successfully');
-        } catch (error) {
-            console.error('❌ Service initialization failed:', error);
-            this.isInitialized = false;
-        }
-    }
-
-    /**
-     * Set up Chrome API event listeners with performance tracking
-     * MODIFIED: Added comprehensive event capture metrics
-     */
-    setupEventListeners() {
-        // Tab activation events with metrics
-        chrome.tabs.onActivated.addListener((activeInfo) => {
-            if (!this.isPaused) {
-                this.performanceMetrics.eventCaptureStats.tabSwitches++;
-                this.handleTabActivated(activeInfo);
-            }
-        });
-
-        // Tab update events with metrics
-        chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-            if (!this.isPaused) {
-                if (changeInfo.url) {
-                    this.performanceMetrics.eventCaptureStats.urlChanges++;
-                }
-                this.handleTabUpdated(tabId, changeInfo, tab);
-            }
-        });
-
-        // Window focus events with metrics
-        chrome.windows.onFocusChanged.addListener((windowId) => {
-            if (!this.isPaused) {
-                this.performanceMetrics.eventCaptureStats.focusTransitions++;
-                this.handleWindowFocusChanged(windowId);
-            }
-        });
-
-        // Idle detection events
-        chrome.idle.onStateChanged.addListener((state) => {
-            if (!this.isPaused) {
-                this.handleIdleStateChanged(state);
-            }
-        });
-
-        // Extension install/startup events
-        chrome.runtime.onInstalled.addListener(() => {
-            this.handleExtensionInstalled();
-        });
-
-        chrome.runtime.onStartup.addListener(() => {
-            this.handleExtensionStartup();
-        });
-
-        // Enhanced message passing with performance tracking
-        chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-            const startTime = performance.now();
-            this.handleMessage(message, sender, sendResponse);
-            
-            // ADDED: Track service worker performance
-            const processingTime = performance.now() - startTime;
-            this.performanceMetrics.serviceWorkerPerformance.push({
-                timestamp: Date.now(),
-                action: message.action,
-                processingTime: processingTime
-            });
-            
-            return true;
-        });
-    }
-
-    // Periodic ML monitoring for background service
-    startMonitoring() {
-        if (this.monitoringInterval) {
-            clearInterval(this.monitoringInterval);
-        }
-        // Use the interval from settings, default to 15s
-        const interval = this.settings.monitoringInterval || 15000;
-        this.monitoringInterval = setInterval(() => {
-            if (!this.isPaused) {
-                this.processMLPrediction();
-            }
-        }, interval);
-        // Run one prediction immediately
-        this.processMLPrediction();
-    }
-
-    stopMonitoring() {
-        if (this.monitoringInterval) {
-            clearInterval(this.monitoringInterval);
-            this.monitoringInterval = null;
-        }
-    }
-
-    // Handle window focus changes (metrics or logic as needed)
-    handleWindowFocusChanged(windowId) {
-        // Example: log or update metrics
-        this.performanceMetrics.eventCaptureStats.lastFocusedWindow = windowId;
-        // You can add more logic here if needed
-        // console.log('Window focus changed:', windowId);
-    }
-
-    // Handle Chrome idle state changes (simple implementation)
-    handleIdleStateChanged(state) {
-        // Log the state and update metrics
-        console.log('[IdleStateChanged]', state);
-        this.performanceMetrics.eventCaptureStats.lastIdleState = state;
-        // Optionally, pause/resume monitoring based on idle/active
-        if (state === 'idle' || state === 'locked') {
-            this.pauseTracking();
-        } else if (state === 'active') {
-            this.resumeTracking();
-        }
-    }
-
-    // --- Hoeffding Tree Bootstrap Feedback Notification ---
-    // Show a browser notification every 15 minutes during bootstrap
-    startBootstrapFeedbackNotification() {
-        if (this._bootstrapFeedbackInterval) return;
-        this._bootstrapFeedbackInterval = setInterval(() => {
-            if (
-                this.hoeffdingTree &&
-                this.hoeffdingTree.instancesSeen < this.hoeffdingTree.gracePeriod
-            ) {
-                this.showBootstrapFeedbackNotification();
-            }
-        }, 15 * 60 * 1000); // 15 minutes
-    }
-
-    stopBootstrapFeedbackNotification() {
-        if (this._bootstrapFeedbackInterval) {
-            clearInterval(this._bootstrapFeedbackInterval);
-            this._bootstrapFeedbackInterval = null;
-        }
-    }
-
-    showBootstrapFeedbackNotification() {
-        chrome.notifications.create({
-            type: 'basic',
-            iconUrl: chrome.runtime.getURL('assets/icons/icon128.png'),
-            title: 'Help Train the AI (Bootstrap Mode)',
-            message: 'Please provide feedback to help train the AI. Click here to open the feedback form.',
-            priority: 2
-        }, (notificationId) => {
-            // Optionally, add a click handler to open the popup or feedback page
-            chrome.notifications.onClicked.addListener(function handler(id) {
-                if (id === notificationId) {
-                    chrome.runtime.openOptionsPage(); // Or open the popup/feedback page
-                    chrome.notifications.clear(notificationId);
-                    chrome.notifications.onClicked.removeListener(handler);
-                }
-            });
-        });
-    }
-
-    /**
-     * Enhanced ML prediction processing with comprehensive metrics
-     * MODIFIED: Added detailed performance and accuracy tracking
-     */
-    async processMLPrediction() {
-        try {
-            // ADDED: Track inference interval timing
-            const currentTime = Date.now();
-            if (this.performanceMetrics.inferenceIntervals.length > 0) {
-                const lastInference = this.performanceMetrics.inferenceIntervals[this.performanceMetrics.inferenceIntervals.length - 1];
-                const interval = (currentTime - lastInference.timestamp) / 1000; // seconds
-                this.performanceMetrics.inferenceIntervals.push({
-                    timestamp: currentTime,
-                    interval: interval
-                });
-            } else {
-                this.performanceMetrics.inferenceIntervals.push({
-                    timestamp: currentTime,
-                    interval: 0
-                });
-            }
-
-            // ADDED: Feature extraction timing for O(1) performance validation
-            const featureStartTime = performance.now();
-            const features = this.featureEngineer.extractFeatures();
-            const featureExtractionTime = performance.now() - featureStartTime;
-            
-            this.performanceMetrics.featureExtractionTimes.push({
-                timestamp: currentTime,
-                extractionTime: featureExtractionTime,
-                featureCount: features.length
-            });
-            this.performanceMetrics.totalFeatureExtractions++;
-
-            // ADDED: Track specific feature values for accuracy validation
-            if (features.length >= 9) {
-                // Session duration normalization (feature 0)
-                this.performanceMetrics.sessionDurationNormalizations.push({
-                    timestamp: currentTime,
-                    value: features[0]
-                });
-                
-                // Tab switching velocity (feature 1)
-                this.performanceMetrics.tabSwitchingVelocities.push({
-                    timestamp: currentTime,
-                    value: features[1]
-                });
-                
-                // Domain diversity (feature 7)
-                this.performanceMetrics.domainDiversityScores.push({
-                    timestamp: currentTime,
-                    value: features[7]
-                });
-            }
-
-            // ADDED: Classification timing for real-time operation metrics
-            const classificationStartTime = performance.now();
-            const prediction = this.hoeffdingTree.predict(features);
-            const classificationTime = performance.now() - classificationStartTime;
-            
-            this.performanceMetrics.classificationTiming.push({
-                timestamp: currentTime,
-                classificationTime: classificationTime
-            });
-
-            // ADDED: Track class probabilities for ML evaluation
-            this.performanceMetrics.classProbabilityHistory.push({
-                timestamp: currentTime,
-                probabilities: [...prediction.classDistribution],
-                prediction: prediction.prediction,
-                confidence: prediction.confidence
-            });
-
-            // ADDED: Track bootstrap mode instances
-            if (this.hoeffdingTree.instancesSeen < 200) {
-                this.performanceMetrics.bootstrapModeInstances = this.hoeffdingTree.instancesSeen;
-            }
-
-            // Store prediction result with enhanced metadata
-            const predictionData = {
-                ...prediction,
-                features: features,
-                timestamp: currentTime,
-                sessionStats: this.featureEngineer.getSessionStats(),
-                performanceMetrics: {
-                    featureExtractionTime: featureExtractionTime,
-                    classificationTime: classificationTime,
-                    totalProcessingTime: featureExtractionTime + classificationTime
-                }
-            };
-
-            await this.storePredictionResult(predictionData);
-            this.performanceMetrics.totalPredictions++;
-
-            // ADDED: Track prediction throughput (predictions per hour)
-            this.updatePredictionThroughput(currentTime);
-
-            // Check if notification should be triggered
-            if (prediction.prediction === 2 && this.shouldTriggerNotification(prediction)) {
-                await this.showOveruseNotification(prediction);
-            }
-
-        } catch (error) {
-            console.warn('ML prediction error:', error);
-        }
-    }
-
-    // ADDED: Calculate and track prediction throughput
-    updatePredictionThroughput(currentTime) {
-        const oneHourAgo = currentTime - (60 * 60 * 1000);
-        const recentPredictions = this.performanceMetrics.classProbabilityHistory.filter(
-            p => p.timestamp > oneHourAgo
-        );
-        
-        this.performanceMetrics.predictionThroughput.push({
-            timestamp: currentTime,
-            predictionsPerHour: recentPredictions.length
-        });
-
-        // Keep only recent throughput measurements
-        if (this.performanceMetrics.predictionThroughput.length > 100) {
-            this.performanceMetrics.predictionThroughput.shift();
-        }
-    }
-
-    /**
-     * Enhanced message handling with performance tracking
-     * MODIFIED: Added comprehensive metrics retrieval
-     */
-    async handleMessage(message, sender, sendResponse) {
-        try {
-            switch (message.action) {
-                case 'getStats':
-                    sendResponse(await this.getSystemStats());
-                    break;
-                    
-                case 'getResearchMetrics':
-                    // ADDED: New endpoint for research metrics
-                    sendResponse(await this.getResearchMetrics());
-                    break;
-                    
-                case 'updateSettings':
-                    await this.updateSettings(message.settings);
-                    sendResponse({ success: true });
-                    break;
-                    
-                case 'resetSystem':
-                    await this.resetSystem();
-                    sendResponse({ success: true });
-                    break;
-                    
-                case 'pauseTracking':
-                    this.pauseTracking();
-                    sendResponse({ success: true, paused: true });
-                    break;
-                    
-                case 'resumeTracking':
-                    this.resumeTracking();
-                    sendResponse({ success: true, paused: false });
-                    break;
-                    
-                case 'deleteAllData':
-                    await this.deleteAllData();
-                    sendResponse({ success: true });
-                    break;
-                    
-                case 'submitFeedback':
-                    await this.processFeedback(message.feedback);
-                    sendResponse({ success: true });
-                    break;
-                    
-                case 'getVisualizationData':
-                    sendResponse(await this.getVisualizationData());
-                    break;
-                    
-                case 'testNotification':
-                    await this.showTestNotification();
-                    sendResponse({ success: true });
-                    break;
-                    
-                case 'getTreeStructure':
-                    // Return the latest tree structure for visualization
-                    if (this.hoeffdingTree) {
-                        sendResponse({
-                            treeStructure: this.hoeffdingTree.exportTreeStructure(),
-                            instancesSeen: this.hoeffdingTree.instancesSeen
-                        });
-                    } else {
-                        sendResponse({ treeStructure: null });
-                    }
-                    break;
-                    
-                default:
-                    sendResponse({ error: 'Unknown action: ' + message.action });
-            }
-
-        } catch (error) {
-            console.error('Message handling error:', error);
-            sendResponse({ error: error.message });
-        }
-    }
-
-    // ADDED: Comprehensive research metrics collection method
-    async getResearchMetrics() {
-        try {
-            const currentTime = Date.now();
-            const sessionDuration = (currentTime - this.performanceMetrics.sessionStartTime) / 1000; // seconds
-
-            // Calculate mean inference interval and standard deviation
-            const intervals = this.performanceMetrics.inferenceIntervals
-                .filter(i => i.interval > 0)
-                .map(i => i.interval);
-            const meanInferenceInterval = intervals.length > 0 ? 
-                intervals.reduce((sum, val) => sum + val, 0) / intervals.length : 0;
-            const inferenceStdDev = this.calculateStandardDeviation(intervals);
-
-            // Calculate feature extraction statistics
-            const sessionDurNorms = this.performanceMetrics.sessionDurationNormalizations.map(s => s.value);
-            const tabSwitchVels = this.performanceMetrics.tabSwitchingVelocities.map(t => t.value);
-            const domainDivs = this.performanceMetrics.domainDiversityScores.map(d => d.value);
-
-            // Calculate memory usage statistics
-            const memoryStats = this.performanceMetrics.memoryUsage;
-            const avgMemory = memoryStats.length > 0 ? 
-                memoryStats.reduce((sum, m) => sum.estimated + sum, 0) / memoryStats.length : 0;
-
-            // Get ML model statistics
-            const treeStats = this.hoeffdingTree.getStats();
-            const spcStats = this.spcModel.getStatistics();
-
-            return {
-                // Technical Achievement Validation
-                technicalValidation: {
-                    behavioralFeaturesExtracted: 9,
-                    totalFeatureExtractions: this.performanceMetrics.totalFeatureExtractions,
-                    temporalScales: 3, // short, primary, baseline windows
-                    updatePerformance: "O(1)", // Circular buffer operations
-                    memoryUsageUnder5MB: avgMemory < (5 * 1024 * 1024),
-                    averageMemoryMB: avgMemory / (1024 * 1024)
-                },
-
-                // System Performance Analysis
-                systemPerformance: {
-                    meanInferenceInterval: {
-                        mean: meanInferenceInterval,
-                        stdDev: inferenceStdDev,
-                        target: "11.97 ± 4.95 seconds"
-                    },
-                    predictionThroughput: {
-                        current: this.performanceMetrics.predictionThroughput.length > 0 ? 
-                            this.performanceMetrics.predictionThroughput[this.performanceMetrics.predictionThroughput.length - 1].predictionsPerHour : 0,
-                        target: "300+ predictions/hour"
-                    },
-                    memoryUtilization: {
-                        currentMB: avgMemory / (1024 * 1024),
-                        percentageOf5MB: (avgMemory / (5 * 1024 * 1024)) * 100,
-                        target: "3.2MB (64% of 5MB budget)"
-                    },
-                    featureExtractionAccuracy: {
-                        sessionDurationNormalization: {
-                            mean: this.calculateMean(sessionDurNorms),
-                            stdDev: this.calculateStandardDeviation(sessionDurNorms),
-                            target: "0.0017 ± 0.0004"
-                        },
-                        tabSwitchingVelocity: {
-                            mean: this.calculateMean(tabSwitchVels),
-                            stdDev: this.calculateStandardDeviation(tabSwitchVels),
-                            target: "0.1618 ± 0.0199"
-                        },
-                        domainDiversity: {
-                            mean: this.calculateMean(domainDivs),
-                            perfect: domainDivs.every(d => d === 1.0),
-                            target: "1.0"
-                        }
-                    }
-                },
-
-                // ML Model Evaluation
-                mlModelEvaluation: {
-                    hoeffdingTreeLearning: {
-                        classProbabilities: treeStats.recentPredictions.length > 0 ? 
-                            treeStats.recentPredictions[treeStats.recentPredictions.length - 1].classDistribution : 
-                            [0.33, 0.33, 0.34],
-                        bootstrapMode: this.performanceMetrics.bootstrapModeInstances < 200,
-                        instancesSeen: treeStats.instancesSeen,
-                        gracePeriod: 200
-                    },
-                    conceptDriftDetection: {
-                        driftCount: treeStats.driftCount,
-                        driftEvents: this.performanceMetrics.driftDetectionEvents,
-                        adwinStatus: "No drift detected"
-                    },
-                    anomalyDetection: {
-                        spcInitialized: spcStats.isInitialized,
-                        anomalyCount: spcStats.anomalyCount,
-                        controlLimitsEstablished: spcStats.upperControlLimit > 0,
-                        status: "Baseline established, no anomalies"
-                    },
-                    feedbackAdaptation: {
-                        feedbackCount: this.performanceMetrics.feedbackAdaptations.length,
-                        adaptationEvents: this.performanceMetrics.feedbackAdaptations
-                    }
-                },
-
-                // Browser Integration
-                browserIntegration: {
-                    eventCapture: this.performanceMetrics.eventCaptureStats,
-                    serviceWorkerPerformance: {
-                        averageProcessingTime: this.calculateMean(
-                            this.performanceMetrics.serviceWorkerPerformance.map(p => p.processingTime)
-                        ),
-                        totalOperations: this.performanceMetrics.serviceWorkerPerformance.length
-                    },
-                    realTimeClassification: {
-                        averageClassificationTime: this.calculateMean(
-                            this.performanceMetrics.classificationTiming.map(c => c.classificationTime)
-                        ),
-                        millisecondsLevel: true
-                    }
-                },
-
-                // Resource Efficiency
-                resourceEfficiency: {
-                    memoryFootprint: {
-                        currentMB: avgMemory / (1024 * 1024),
-                        vs15to30MBAverage: avgMemory < (15 * 1024 * 1024),
-                        efficient: true
-                    },
-                    computationTimes: {
-                        averageFeatureExtraction: this.calculateMean(
-                            this.performanceMetrics.featureExtractionTimes.map(f => f.extractionTime)
-                        ),
-                        averageClassification: this.calculateMean(
-                            this.performanceMetrics.classificationTiming.map(c => c.classificationTime)
-                        ),
-                        millisecondsLevel: true
-                    },
-                    browserPerformanceImpact: {
-                        degradation: false,
-                        responsive: true
-                    }
-                },
-
-                // Session Information
-                sessionInfo: {
-                    sessionDurationMinutes: sessionDuration / 60,
-                    totalPredictions: this.performanceMetrics.totalPredictions,
-                    evaluationStartTime: this.performanceMetrics.evaluationStartTime,
-                    timestamp: currentTime
-                }
-            };
-
-        } catch (error) {
-            console.error('Research metrics error:', error);
-            return { error: error.message };
-        }
-    }
-
-    // ADDED: Helper method to calculate mean
-    calculateMean(values) {
-        if (!values || values.length === 0) return 0;
-        return values.reduce((sum, val) => sum + val, 0) / values.length;
-    }
-
-    // ADDED: Helper method to calculate standard deviation
-    calculateStandardDeviation(values) {
-        if (!values || values.length === 0) return 0;
-        const mean = this.calculateMean(values);
-        const squaredDiffs = values.map(value => Math.pow(value - mean, 2));
-        const avgSquaredDiff = this.calculateMean(squaredDiffs);
-        return Math.sqrt(avgSquaredDiff);
-    }
-
-    /**
-     * Enhanced feedback processing with adaptation tracking
-     * MODIFIED: Added feedback adaptation metrics
-     */
-    async processFeedback(feedback) {
-        try {
-            const recent = await this.getRecentPredictions();
-            const target = recent.find(p => Math.abs(p.timestamp - feedback.timestamp) < 60000);
-            
-            if (!target) return;
-
-            const classMap = ['productive', 'non-productive', 'overuse'];
-            const corrected = classMap.indexOf(feedback.trueClass);
-            
-            if (corrected === -1) {
-                console.warn('⚠️ Invalid class label in feedback:', feedback.trueClass);
-                return;
-            }
-
-            const updateResult = this.hoeffdingTree.update(
-                target.features,
-                corrected,
-                {
-                    correctedClass: corrected,
-                    confidence: feedback.confidence || 1.0,
-                    reasoning: feedback.reasoning || 'User-provided label'
-                }
-            );
-
-            // ADDED: Track feedback adaptation
-            this.performanceMetrics.feedbackAdaptations.push({
-                timestamp: Date.now(),
-                originalPrediction: target.prediction,
-                correctedClass: corrected,
-                confidence: feedback.confidence || 1.0,
-                modelResponse: updateResult
-            });
-
-            await this.logUserFeedback({
-                ...feedback,
-                predictionId: target.timestamp,
-                modelResponse: updateResult
-            });
-
-            console.log('✅ User feedback processed:', updateResult);
-
-        } catch (e) {
-            console.error('❌ Feedback processing error:', e);
-        }
-    }
-
-    /**
-     * Return the most recent predictions (default: last 100)
-     */
-    async getRecentPredictions(limit = 100) {
-        // If predictionHistory is an array of predictions with timestamps
-        if (!Array.isArray(this.predictionHistory)) return [];
-        // Return the last N predictions, most recent last
-        return this.predictionHistory.slice(-limit);
-    }
-
-    /**
-     * Return data for popup/dashboard visualizations
-     */
-    async getVisualizationData() {
-        // Example: return recent predictions and session stats
-        const recentPredictions = await this.getRecentPredictions(100);
-        const sessionStats = this.featureEngineer ? this.featureEngineer.getSessionStats() : null;
-        return {
-            recentPredictions,
-            sessionStats,
-            // Add more fields as needed for your visualizations
-        };
-    }
-
-    /**
-     * Enhanced system statistics with research metrics
-     * MODIFIED: Include comprehensive metrics in stats
-     */
-    async getSystemStats() {
-        try {
-            const stats = {
-                isInitialized: this.isInitialized,
-                isPaused: this.isPaused,
-                settings: this.settings,
-                sessionStats: this.featureEngineer ? this.featureEngineer.getSessionStats() : null,
-                mlStats: this.hoeffdingTree ? this.hoeffdingTree.getStats() : null,
-                spcStats: this.spcModel ? this.spcModel.getStatistics() : null,
-                lastNotification: this.lastNotificationTime,
-                uptime: Date.now() - (this.startTime || Date.now()),
-                feedbackCount: this.userFeedbackQueue.length,
-                // ADDED: Include performance metrics in standard stats
-                performanceMetrics: {
-                    totalPredictions: this.performanceMetrics.totalPredictions,
-                    memoryUsageMB: this.estimateMemoryUsage() / (1024 * 1024),
-                    averageInferenceInterval: this.calculateMean(
-                        this.performanceMetrics.inferenceIntervals.map(i => i.interval)
-                    ),
-                    eventCaptureStats: this.performanceMetrics.eventCaptureStats,
-                    // --- FULL ARRAYS FOR DASHBOARD VISUALIZATIONS ---
-                    classificationTiming: this.performanceMetrics.classificationTiming,
-                    predictionThroughput: this.performanceMetrics.predictionThroughput,
-                    memoryUsage: this.performanceMetrics.memoryUsage,
-                    sessionDurationNormalizations: this.performanceMetrics.sessionDurationNormalizations,
-                    tabSwitchingVelocities: this.performanceMetrics.tabSwitchingVelocities,
-                    domainDiversityScores: this.performanceMetrics.domainDiversityScores,
-                    featureExtractionTimes: this.performanceMetrics.featureExtractionTimes,
-                    reportingTimes: this.performanceMetrics.reportingTimes,
-                    messagingLatency: this.performanceMetrics.messagingLatency,
-                    accuracyHistory: this.hoeffdingTree ? this.hoeffdingTree.performanceMetrics.accuracyHistory : [],
-                    driftDetections: this.hoeffdingTree ? this.hoeffdingTree.performanceMetrics.driftDetections : [],
-                    feedbackAdaptations: this.performanceMetrics.feedbackAdaptations,
-                },
-                // --- PREDICTION HISTORY FOR USAGE CLASSIFICATION OVER TIME ---
-                predictionHistory: this.predictionHistory || [],
-                // --- FEEDBACK HISTORY/IMPACT ---
-                feedbackHistory: this.performanceMetrics.feedbackAdaptations || [],
-            };
-
-            // Get recent predictions
-            const recentPredictions = await this.getRecentPredictions();
-            stats.recentPredictions = recentPredictions.slice(-10);
-            return stats;
-        } catch (error) {
-            console.error('Stats error:', error);
-            return { error: error.message };
-        }
-    }
-
-    // Handle tab activation event
-    handleTabActivated(activeInfo) {
-        // Example: log or update metrics, or process event
-        // You can expand this logic as needed
-        // console.log('Tab activated:', activeInfo);
-    }
-
-    // Handle tab update event
-    handleTabUpdated(tabId, changeInfo, tab) {
-        // Example: log or update metrics, or process event
-        // console.log('Tab updated:', tabId, changeInfo, tab);
-    }
-
-    // Pause tracking (set isPaused and stop monitoring)
-    pauseTracking() {
-        this.isPaused = true;
-        this.stopMonitoring && this.stopMonitoring();
-    }
-
-    // Resume tracking (unset isPaused and start monitoring)
-    resumeTracking() {
-        this.isPaused = false;
-        this.startMonitoring && this.startMonitoring();
-    }
-
-    // Delete all data (clear relevant storage and in-memory data)
-    async deleteAllData() {
-        // Clear local storage
-        await new Promise(resolve => chrome.storage.local.clear(resolve));
-        // Reset in-memory data
-        this.predictionHistory = [];
-        this.userFeedbackQueue = [];
-        if (this.featureEngineer) {
-            this.featureEngineer.currentSession = {
-                startTime: Date.now(),
-                tabSwitches: 0,
-                focusTime: 0,
-                websiteCategories: new Map(),
-                domains: new Set(),
-                lastActivityTime: Date.now(),
-                scrollEvents: 0,
-                clickEvents: 0,
-                keystrokeEvents: 0,
-                pageViews: 0,
-                totalActiveTime: 0
-            };
-        }
-    }
-
-    /**
-     * Store prediction result in predictionHistory and optionally persist.
-     * @param {Object} predictionData
-     */
-    async storePredictionResult(predictionData) {
-        if (!this.predictionHistory) this.predictionHistory = [];
-        this.predictionHistory.push(predictionData);
-        // Optionally, persist to chrome.storage.local for durability
-        try {
-            await new Promise(resolve => {
-                chrome.storage.local.set({ predictionHistory: this.predictionHistory }, resolve);
-            });
-        } catch (e) {
-            console.warn('Failed to persist predictionHistory:', e);
-        }
-    }
+import FeatureEngineer from '../analysis/feature-engineer.js';
+import WeightedVoter from '../analysis/weighted-voting.js';
+import HoeffdingTree from '../models/hoeffding-tree.js';
+import { MSPC } from '../models/mspc.js';
+import MetricsCollector from '../analysis/metrics.js';
+
+// ── Promisified Chrome APIs ──────────────────────────────────────────────
+function createNotificationAsync(id, options) {
+  return new Promise((resolve, reject) => {
+    chrome.notifications.create(id, options, (createdId) => {
+      if (chrome.runtime.lastError) reject(chrome.runtime.lastError);
+      else resolve(createdId);
+    });
+  });
 }
 
-// Initialize service with metrics collection
-OveruseDetectionService.create().then(service => {
-    chrome.runtime.onConnect.addListener((port) => {
-        // Keep service worker alive logic here
+function clearNotificationAsync(id) {
+  return new Promise((resolve, reject) => {
+    chrome.notifications.clear(id, (wasCleared) => {
+      if (chrome.runtime.lastError) reject(chrome.runtime.lastError);
+      else resolve(wasCleared);
     });
-    console.log('🚀 Internet Overuse Detection Service Worker loaded with research metrics');
+  });
+}
+
+function createAlarmAsync(name, info) {
+  return new Promise((resolve, reject) => {
+    chrome.alarms.create(name, info);
+    // chrome.alarms.create has no callback, so immediately check for errors
+    if (chrome.runtime.lastError) reject(chrome.runtime.lastError);
+    else resolve(name);
+  });
+}
+
+function clearAlarmAsync(name) {
+  return new Promise((resolve, reject) => {
+    chrome.alarms.clear(name, (wasCleared) => {
+      if (chrome.runtime.lastError) reject(chrome.runtime.lastError);
+      else resolve(wasCleared);
+    });
+  });
+}
+// ─────────────────────────────────────────────────────────────────────────
+
+const MAX_SESSIONS = 100; // Maximum number of session entries to retain
+
+// Constants for notification scheduling
+const NOTIFICATION_SCHEDULE = [
+  { threshold: 1000, interval: 15 },    // 15 minutes
+  { threshold: 2000, interval: 30 },    // 30 minutes  
+  { threshold: 3000, interval: 60 },    // 1 hour
+  { threshold: 4000, interval: 240 },   // 4 hours
+  { threshold: 5000, interval: 360 },   // 6 hours
+  { threshold: 6000, interval: 720 },   // 12 hours
+  { threshold: 7000, interval: 840 },   // 14 hours
+  { threshold: 8000, interval: 1440 },  // 1 day
+  { threshold: 9000, interval: 4320 },  // 3 days
+  { threshold: 10000, interval: 7200 }, // 5 days
+  { threshold: 11000, interval: 10080 } // 1 week (permanent)
+];
+
+const ALARM_NAME = 'feedbackNotification';
+const OVERUSE_ALARM = 'overuseDetection';
+
+// System state
+let systemState = {
+  isTracking: true,
+  totalInteractions: 0,
+  currentNotificationLevel: 0,
+  lastProcessingTime: 0,
+  systemInitialized: false
+};
+
+// Core system components
+let featureEngineer = null;
+let weightedVoter = null;
+let metricsCollector = null;
+let aucWorker = null;
+let metricsWorker = null;
+
+chrome.notifications.onButtonClicked.addListener((notificationId, buttonIndex) => {
+  // Feedback notifications start with 'feedback_'
+  if (notificationId.startsWith('feedback_')) {
+    if (buttonIndex === 0) {
+      chrome.tabs.create({ url: chrome.runtime.getURL('popup.html?feedback=true') });
+    }
+    clearNotificationAsync(notificationId);
+    return;
+  }
+
+  // Overuse notifications start with 'overuse_'
+  if (notificationId.startsWith('overuse_')) {
+    if (buttonIndex === 0) {
+      chrome.tabs.create({ url: chrome.runtime.getURL('popup.html?overuse=true') });
+    }
+    clearNotificationAsync(notificationId);
+    return;
+  }
 });
+
+function initWorkers() {
+  // Terminate any existing workers
+  if (aucWorker) {
+    aucWorker.terminate();
+    aucWorker = null;
+  }
+  if (metricsWorker) {
+    metricsWorker.terminate();
+    metricsWorker = null;
+  }
+
+  // Create fresh workers
+  aucWorker = new Worker(chrome.runtime.getURL('workers/auc-worker.js'));
+  metricsWorker = new Worker(chrome.runtime.getURL('workers/metrics-worker.js'));
+
+  aucWorker.onmessage = handleWorkerMessage;
+  metricsWorker.onmessage = handleWorkerMessage;
+  aucWorker.onerror = e => console.error('AUC Worker error:', e);
+  metricsWorker.onerror = e => console.error('Metrics Worker error:', e);
+
+  console.log('✅ Web workers (re)initialized');
+}
+
+// Storage keys
+const STORAGE_KEYS = {
+  SYSTEM_STATE: 'systemState',
+  INTERACTION_COUNT: 'totalInteractions',
+  NOTIFICATION_LEVEL: 'notificationLevel',
+  ML_MODELS: 'mlModels',
+  METRICS_DATA: 'metricsData',
+  SESSION_DATA: 'sessionData',
+  SESSION_BUFFER: 'sessionBuffer'
+};
+
+/**
+ * Initialize the service worker and system components
+ */
+async function initializeSystem() {
+  try {
+    console.log('🚀 Initializing Internet Overuse Detection System');
+
+    // Load saved state
+    await loadSystemState();
+
+    // Initialize ML components
+    const hoeffdingTree = new HoeffdingTree({ 
+      nFeatures: 15,
+      nClasses: 3,
+      classLabels: ['productive', 'non-productive', 'overuse']
+    });
+    
+    const mspc = new MSPC(6);
+    
+    featureEngineer = new FeatureEngineer();
+    weightedVoter = new WeightedVoter({ 
+      tree: hoeffdingTree, 
+      mspc: mspc 
+    });
+    
+    metricsCollector = new MetricsCollector();
+
+    // Initialize web workers
+    initWorkers();
+
+    // Set up notification scheduling
+    await setupNotificationSchedule();
+
+    systemState.systemInitialized = true;
+    await saveSystemState();
+
+    await purgeOldSessions();
+
+    console.log('✅ System initialization complete');
+  } catch (error) {
+    console.error('❌ System initialization failed:', error);
+    await handleSystemError(error);
+  }
+}
+
+/**
+ * Handle worker messages
+ */
+function handleWorkerMessage(event) {
+  const { type, result, id, error } = event.data;
+  
+  if (error) {
+    console.error(`Worker error (${type}):`, error);
+    return;
+  }
+
+  // Process worker results
+  switch (type) {
+    case 'calculateAUCResult':
+      metricsCollector.handleAucResults(result);
+      break;
+    case 'processPerformanceMetricsResult':
+      metricsCollector.handleMetricsResults(result);
+      break;
+    default:
+      console.log(`Received worker result: ${type}`);
+  }
+}
+
+/**
+ * Set up notification scheduling based on interaction count
+ */
+async function setupNotificationSchedule() {
+  try {
+    const rawLevel = getCurrentNotificationLevel();
+    const level = Math.min(rawLevel, NOTIFICATION_SCHEDULE.length - 1);
+    const intervalMinutes = NOTIFICATION_SCHEDULE[level].interval;
+
+    await clearAlarmAsync(ALARM_NAME);
+
+    // Clear existing alarms
+    await createAlarmAsync(ALARM_NAME, {
+        delayInMinutes: intervalMinutes,
+        periodInMinutes: intervalMinutes
+    });
+
+    console.log(`📅 Notification schedule set: ${intervalMinutes} minutes`);
+  } catch (error) {
+    console.error('Failed to setup notification schedule:', error);
+  }
+}
+
+/**
+ * Get current notification level based on interaction count
+ */
+function getCurrentNotificationLevel() {
+  for (let i = NOTIFICATION_SCHEDULE.length - 1; i >= 0; i--) {
+    if (systemState.totalInteractions >= NOTIFICATION_SCHEDULE[i].threshold) {
+      return i;
+    }
+  }
+  return 0; // Default to first level
+}
+
+/**
+ * Event Listeners Setup
+ */
+
+// Extension installation/startup
+chrome.runtime.onInstalled.addListener(async (details) => {
+  console.log('Extension installed/updated:', details.reason);
+  await initializeSystem();
+});
+
+chrome.runtime.onStartup.addListener(async () => {
+  console.log('Extension startup');
+  await initializeSystem();
+});
+
+// Message handling from content scripts and popup
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  handleMessage(message, sender, sendResponse);
+  return true; // Keep message channel open for async responses
+});
+
+// Alarm handling for notifications
+chrome.alarms.onAlarm.addListener(async (alarm) => {
+  if (alarm.name === ALARM_NAME) {
+    await showFeedbackNotification();
+  } else if (alarm.name === OVERUSE_ALARM) {
+    await handleOveruseDetection();
+  }
+});
+
+// Tab updates for tracking
+chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
+  if (changeInfo.status === 'complete' && tab.url && systemState.isTracking) {
+    await injectContentScript(tabId, tab.url);
+  }
+});
+
+// Tab removal cleanup
+chrome.tabs.onRemoved.addListener(async (tabId) => {
+  await handleTabClosed(tabId);
+});
+
+/**
+ * Main message handler
+ */
+async function handleMessage(message, sender, sendResponse) {
+  const startTime = performance.now();
+
+  try {
+    switch (message.type) {
+      case 'BATCH_STATS':
+        await processBatchStats(message.data, message.mspcVector, sender);
+        break;
+        
+      case 'FINAL_STATS':
+        await processFinalStats(message.data, message.mspcVector, sender);
+        break;
+        
+      case 'VISIBILITY_CHANGE':
+        await handleVisibilityChange(message, sender);
+        break;
+        
+      case 'USER_FEEDBACK':
+        await handleUserFeedback(message.data);
+        break;
+        
+      case 'GET_CURRENT_STATS':
+        sendResponse(await getCurrentStats());
+        break;
+        
+      case 'GET_SESSION_STATS':
+        sendResponse(await getSessionStats(message.tabId));
+        break;
+        
+      case 'RESET_SYSTEM':
+        await resetSystem();
+        sendResponse({ success: true });
+        break;
+        
+      case 'PAUSE_TRACKING':
+        await pauseTracking();
+        sendResponse({ success: true });
+        break;
+        
+      case 'RESUME_TRACKING':
+        await resumeTracking();
+        sendResponse({ success: true });
+        break;
+        
+      case 'DELETE_ALL_DATA':
+        await deleteAllData();
+        sendResponse({ success: true });
+        break;
+        
+      case 'GET_SYSTEM_STATUS':
+        sendResponse(getSystemStatus());
+        break;
+        
+      case 'SHOW_OVERUSE_NOTIFICATION':
+        await showOveruseNotification(message.data);
+        break;
+        
+      default:
+        console.warn('Unknown message type:', message.type);
+    }
+
+    // Record processing latency
+    const duration = performance.now() - startTime;
+    if (metricsCollector) {
+        metricsCollector.recordProcessingLatency(message.type, startTime);
+    }
+  } catch (error) {
+    console.error('Error handling message:', error);
+    sendResponse({ error: error.message });
+  }
+}
+
+/**
+ * Process batch statistics from content scripts
+ */
+async function processBatchStats(data, mspcVector, sender) {
+  if (!systemState.isTracking || !systemState.systemInitialized) return;
+
+  try {
+    // Update interaction count
+    const newInteractions = Object.values(data.interactionCounts).reduce((a, b) => a + b, 0);
+    systemState.totalInteractions += newInteractions;
+
+    // Check if notification level should be updated
+    const newLevel = getCurrentNotificationLevel();
+    if (newLevel !== systemState.currentNotificationLevel) {
+      systemState.currentNotificationLevel = newLevel;
+      await setupNotificationSchedule();
+    }
+
+    // Process through feature engineering
+    const message = {
+      type: 'BATCH_STATS',
+      data: data,
+      mspcVector: mspcVector
+    };
+    
+    featureEngineer.ingest(message);
+
+    // Get the processed feature vector
+    const session = featureEngineer.sessions.get(String(data.tabID));
+    if (session && session.lastVec) {
+      // Perform weighted voting
+      const mspcVectorArray = mspcVector ? new Float64Array(mspcVector) : new Float64Array(6);
+      const votingResult = weightedVoter.vote(mspcVectorArray, session.lastVec);
+
+      // Update metrics
+      metricsCollector.recordVotingAgreement(
+        votingResult.mspcVote,
+        votingResult.hatOriginal,
+        votingResult.vote,
+        1, // ground truth class
+        votingResult.hatscore,
+        votingResult.confidence
+      );
+
+      // Check for overuse detection
+      if (votingResult.vote === 2) {
+        await scheduleOveruseNotification(votingResult);
+      }
+
+      // Send results to UI if popup is open
+      await broadcastToUI({
+        type: 'PREDICTION_UPDATE',
+        data: {
+          tabId: String(data.tabID),
+          prediction: votingResult,
+          hatOutput: hatscore,
+          timestamp: Date.now(),
+          totalInteractions: systemState.totalInteractions
+        }
+      });
+    }
+
+    await saveSystemState();
+    
+  } catch (error) {
+    console.error('Error processing batch stats:', error);
+  }
+}
+
+/**
+ * Process final statistics when tab closes
+ */
+async function processFinalStats(data, mspcVector, sender) {
+  if (!systemState.systemInitialized) return;
+
+  try {
+    const message = { type: 'FINAL_STATS', data, mspcVector };
+    featureEngineer.ingest(message);
+
+    /* ---------- real-time prediction on the final vector ---------- */
+    const session = featureEngineer.sessions.get(String(data.tabID));
+    if (session && session.lastVec) {
+      const mspcArr = mspcVector
+        ? new Float64Array(mspcVector)
+        : new Float64Array(6);
+      const votingResult = weightedVoter.vote(mspcArr, session.lastVec);
+
+      // Record metrics
+      metricsCollector.recordVotingAgreement(
+        votingResult.mspcVote,
+        votingResult.hatOriginal,
+        votingResult.vote,
+        1,
+        votingResult.hatscore,
+        votingResult.confidence
+      );
+
+      // Possible over-use notification
+      if (votingResult.vote === 2) {
+        await scheduleOveruseNotification(votingResult);
+      }
+
+      // Broadcast to UI
+      await broadcastToUI({
+        type: 'PREDICTION_UPDATE',
+        data: {
+          tabId: String(data.tabID),
+          prediction: votingResult,
+          hatOutput: hatscore,
+          timestamp: Date.now(),
+          totalInteractions: systemState.totalInteractions
+        }
+      });
+    }
+    /* ----------------------------------------------------------------------- */
+
+    // Persist session summary
+    const entry = {
+      tabId: String(data.tabID),
+      data,
+      timestamp: Date.now(),
+      domain: data.domain
+    };
+    const buffer = await loadSessionBuffer();
+    buffer.push(entry);
+    if (buffer.length > MAX_SESSIONS) buffer.shift();
+    await saveSessionBuffer(buffer);
+
+  } catch (error) {
+    console.error('Error processing final stats:', error);
+  }
+}
+
+/**
+ * Handle user feedback for model training
+ */
+async function handleUserFeedback(feedbackData) {
+  try {
+    const { tabId, classValue, confidence = 1.0 } = feedbackData;
+    
+    // Add feedback to feature engineer
+    featureEngineer.addUserFeedback(tabId, classValue, confidence);
+
+    // Update metrics
+    if (typeof feedbackData.predictedClass !== 'number') {
+        throw new Error('Missing predictedClass in feedbackData');
+    }
+    metricsCollector.updateConfusionMatrix(
+      feedbackData.predictedClass,
+      classValue,
+      confidence
+    );
+    console.log('✅ User feedback processed:', feedbackData);
+    
+  } catch (error) {
+    console.error('Error handling user feedback:', error);
+  }
+}
+
+/**
+ * Show feedback collection notification
+ */
+async function showFeedbackNotification() {
+  try {
+    const notificationId = `feedback_${Date.now()}`;
+    
+    await createNotificationAsync(notificationId, {
+      type: 'basic',
+      iconUrl: chrome.runtime.getURL('icons/icon48.png'),
+      title: 'Internet Usage Feedback',
+      message: 'Help improve our detection by providing feedback on your recent browsing behavior.',
+      buttons: [
+        { title: 'Provide Feedback' },
+        { title: 'Not Now' }
+      ],
+      priority: 1
+    });
+
+  } catch (error) {
+    console.error('Error showing feedback notification:', error);
+  }
+}
+
+/**
+ * Show overuse detection notification
+ */
+async function showOveruseNotification(data) {
+  try {
+    const notificationId = `overuse_${Date.now()}`;
+    
+    await createNotificationAsync(notificationId, {
+      type: 'basic',
+      iconUrl: chrome.runtime.getURL('icons/warning.png'),
+      title: 'Potential Internet Overuse Detected',
+      message: `Our analysis suggests you might be experiencing internet overuse.`, /*Confidence: ${Math.round(data.confidence * 100)}%*/
+      buttons: [
+        { title: 'View Details' },
+        { title: 'Dismiss' }
+      ],
+      priority: 2
+    });
+
+  } catch (error) {
+    console.error('Error showing overuse notification:', error);
+  }
+}
+
+/**
+ * Schedule overuse notification with rate limiting
+ */
+async function scheduleOveruseNotification(votingResult) {
+  try {
+    // Rate limit overuse notifications (max 1 per hour)
+    const lastOveruseTime = await getLastOveruseNotificationTime();
+    const now = Date.now();
+    
+    if (now - lastOveruseTime < 3600000) { // 1 hour
+      return;
+    }
+
+    await createAlarmAsync(OVERUSE_ALARM, { delayInMinutes: 1 });
+
+    await setLastOveruseNotificationTime(now);
+    
+  } catch (error) {
+    console.error('Error scheduling overuse notification:', error);
+  }
+}
+
+/**
+ * Handle overuse detection alarm
+ */
+async function handleOveruseDetection() {
+  // Get recent prediction data
+  const recentData = await getRecentPredictionData();
+  if (recentData && recentData.prediction.vote === 2) {
+    await showOveruseNotification(recentData.prediction);
+  }
+}
+
+/**
+ * User command handlers
+ */
+
+async function getCurrentStats() {
+  try {
+    const metrics = metricsCollector.exportAllMetrics();
+    const systemStats = {
+      totalInteractions: systemState.totalInteractions,
+      isTracking: systemState.isTracking,
+      currentNotificationLevel: systemState.currentNotificationLevel,
+      systemInitialized: systemState.systemInitialized,
+      lastProcessingTime: systemState.lastProcessingTime
+    };
+
+    return {
+      system: systemStats,
+      metrics: metrics,
+      timestamp: Date.now()
+    };
+  } catch (error) {
+    console.error('Error getting current stats:', error);
+    return { error: error.message };
+  }
+}
+
+async function getSessionStats(tabId) {
+  try {
+    const session = featureEngineer.sessions.get(tabId);
+    if (!session) {
+      return { error: 'Session not found' };
+    }
+
+    return {
+      session: {
+        id: session.id,
+        domains: Array.from(session.domains),
+        startTime: session.startTime,
+        focusMs: session.focusMs,
+        lastVector: session.lastVec,
+        finalPatterns: session.finalPatterns,
+        closed: session.closed,
+        closedAt: session.closedAt
+      },
+      timestamp: Date.now()
+    };
+  } catch (error) {
+    console.error('Error getting session stats:', error);
+    return { error: error.message };
+  }
+}
+
+async function resetSystem() {
+  try {
+    console.log('🔄 Resetting system...');
+
+    // Reset ML models
+    if (weightedVoter && weightedVoter.tree) {
+      weightedVoter.tree = new HoeffdingTree({ 
+        nFeatures: 15,
+        nClasses: 3,
+        classLabels: ['productive', 'non-productive', 'overuse']
+      });
+    }
+
+    if (weightedVoter && weightedVoter.mspc) {
+      weightedVoter.mspc = new MSPC(6);
+    }
+
+    // Reset feature engineer
+    featureEngineer = new FeatureEngineer();
+
+    // Reset metrics
+    metricsCollector = new MetricsCollector();
+
+    // Keep interaction count and notification level
+    await saveSystemState();
+
+    await purgeOldSessions();
+
+    console.log('✅ System reset complete');
+  } catch (error) {
+    console.error('Error resetting system:', error);
+    throw error;
+  }
+}
+
+async function purgeOldSessions() {
+  const buf = await loadSessionBuffer();
+  if (buf.length > MAX_SESSIONS) {
+    await saveSessionBuffer(buf.slice(-MAX_SESSIONS));
+    console.log(`🗑️ Purged sessions to last ${MAX_SESSIONS} entries`);
+  }
+}
+
+async function pauseTracking() {
+  systemState.isTracking = false;
+  await saveSystemState();
+  console.log('⏸️ Tracking paused');
+}
+
+async function resumeTracking() {
+  systemState.isTracking = true;
+  await saveSystemState();
+  console.log('▶️ Tracking resumed');
+}
+
+async function deleteAllData() {
+  try {
+    console.log('🗑️ Deleting all data...');
+
+    // Clear storage
+    await chrome.storage.local.clear();
+    await chrome.storage.sync.clear();
+
+    // Reset system state
+    systemState = {
+      isTracking: true,
+      totalInteractions: 0,
+      currentNotificationLevel: 0,
+      lastProcessingTime: 0,
+      systemInitialized: false
+    };
+
+    // Reinitialize system
+    await initializeSystem();
+
+    console.log('✅ All data deleted and system reinitialized');
+  } catch (error) {
+    console.error('Error deleting all data:', error);
+    throw error;
+  }
+}
+
+function getSystemStatus() {
+  return {
+    state: systemState,
+    components: {
+      featureEngineer: !!featureEngineer,
+      weightedVoter: !!weightedVoter,
+      metricsCollector: !!metricsCollector,
+      aucWorker: !!aucWorker,
+      metricsWorker: !!metricsWorker
+    },
+    timestamp: Date.now()
+  };
+}
+
+/**
+ * Utility functions
+ */
+
+async function loadSystemState() {
+  try {
+    const result = await chrome.storage.local.get(STORAGE_KEYS.SYSTEM_STATE);
+    if (result[STORAGE_KEYS.SYSTEM_STATE]) {
+      systemState = { ...systemState, ...result[STORAGE_KEYS.SYSTEM_STATE] };
+    }
+  } catch (error) {
+    console.error('Error loading system state:', error);
+  }
+}
+
+async function saveSystemState() {
+  try {
+    await chrome.storage.local.set({
+      [STORAGE_KEYS.SYSTEM_STATE]: systemState
+    });
+  } catch (error) {
+    console.error('Error saving system state:', error);
+  }
+}
+
+async function injectContentScript(tabId, url) {
+  try {
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+        return;
+    }
+
+    await chrome.scripting.executeScript({
+      target: { tabId: tabId },
+      files: ['content-script.js']
+    });
+
+  } catch (error) {
+    console.warn('Could not inject content script:', error);
+  }
+}
+
+async function handleTabClosed(tabId) {
+  // Clean up any tab-specific data
+  featureEngineer.sessions.delete(tabId.toString());
+}
+
+async function handleVisibilityChange(message, sender) {
+  // Track visibility changes for better analysis
+  const tabId = sender.tab?.id || 'unknown';
+  console.log(`Tab ${tabId} visibility: ${message.visibilityState}`);
+}
+
+async function broadcastToUI(message) {
+  try {
+    // Send message to popup if it's open
+    await chrome.runtime.sendMessage(message);
+  } catch (error) {
+    // Popup might not be open, which is fine
+  }
+}
+
+async function getLastOveruseNotificationTime() {
+  try {
+    const result = await chrome.storage.local.get('lastOveruseTime');
+    return result.lastOveruseTime || 0;
+  } catch (error) {
+    return 0;
+  }
+}
+
+async function setLastOveruseNotificationTime(time) {
+  try {
+    await chrome.storage.local.set({ lastOveruseTime: time });
+  } catch (error) {
+    console.error('Error setting last overuse time:', error);
+  }
+}
+
+async function getRecentPredictionData() {
+  try {
+    const result = await chrome.storage.local.get('recentPrediction');
+    return result.recentPrediction;
+  } catch (error) {
+    return null;
+  }
+}
+
+async function handleSystemError(error) {
+  console.error('System error:', error);
+  
+    // Terminate any bad workers before recovery
+  if (aucWorker) {
+    aucWorker.terminate();
+    aucWorker = null;
+  }
+  if (metricsWorker) {
+    metricsWorker.terminate();
+    metricsWorker = null;
+  }
+
+  // Try to recover
+  try {
+    await initializeSystem();
+  } catch (recoveryError) {
+    console.error('Recovery failed:', recoveryError);
+  }
+}
+
+async function loadSessionBuffer() {
+  const { sessionBuffer } = await chrome.storage.local.get(STORAGE_KEYS.SESSION_BUFFER);
+  return Array.isArray(sessionBuffer) ? sessionBuffer : [];
+}
+
+async function saveSessionBuffer(buffer) {
+  await chrome.storage.local.set({ [STORAGE_KEYS.SESSION_BUFFER]: buffer });
+}
+
+/**
+ * Memory and latency monitoring for debugging
+ */
+setInterval(async () => {
+  if (systemState.systemInitialized) {
+    try {
+      // Memory usage tracking
+      if (performance.measureUserAgentSpecificMemory) {
+        const memInfo = await performance.measureUserAgentSpecificMemory();
+        console.log('Memory usage:', memInfo.bytes);
+      }
+
+      // Performance metrics
+      const perfMetrics = {
+        timestamp: Date.now(),
+        totalInteractions: systemState.totalInteractions,
+        sessionsActive: featureEngineer?.sessions.size || 0,
+        isTracking: systemState.isTracking
+      };
+
+      // Store for debugging
+      await chrome.storage.local.set({
+        lastPerfMetrics: perfMetrics
+      });
+
+    } catch (error) {
+      console.error('Error in performance monitoring:', error);
+    }
+  }
+}, 60000); // Every minute
+
+// Initialize on script load
+(async () => {
+  await initializeSystem();
+})();
+
+console.log('🎯 Internet Overuse Detection Service Worker loaded');

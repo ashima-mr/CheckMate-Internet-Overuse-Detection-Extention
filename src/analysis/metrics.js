@@ -36,11 +36,9 @@ class MetricsCollector {
    */
   initializeWorkers() {
     try {
-      this.shapWorker = new Worker('workers/shap-worker.js');
       this.aucWorker = new Worker('workers/auc-worker.js');
       this.metricsWorker = new Worker('workers/metrics-worker.js');
       
-      this.shapWorker.onmessage = (e) => this.handleShapResults(e.data);
       this.aucWorker.onmessage = (e) => this.handleAucResults(e.data);
       this.metricsWorker.onmessage = (e) => this.handleMetricsResults(e.data);
       
@@ -342,76 +340,6 @@ class MetricsCollector {
     
     return auc;
   }
-
-  /**
-   * 6. SHAPLEY VALUES FOR ENSEMBLE ATTRIBUTION
-   */
-  calculateShapleyValues(mspcContrib, hatContrib, ensembleOutput) {
-    const shapleyData = {
-      mspcContrib,
-      hatContrib,
-      ensembleOutput,
-      timestamp: Date.now()
-    };
-    
-    if (this.shapWorker) {
-        try {
-            this.shapWorker.postMessage({
-                type: 'calculateShapley',
-                data: shapleyData,
-                id: Date.now()
-            });
-            return null; // Will be handled asynchronously
-        } catch (err) {
-            console.error('SHAP worker error:', err);
-            this.calculateShapleyMainThread(mspcContrib, hatContrib, ensembleOutput);
-        }
-    }
-    
-    // Fallback: simplified Shapley calculation
-    return this.calculateShapleyMainThread(mspcContrib, hatContrib, ensembleOutput);
-  }
-
-  calculateShapleyMainThread(mspcContrib, hatContrib, ensembleOutput) {
-    // Simplified 2-player Shapley fallback (approximate)
-    // shapleyMSPC = (ensemble − hat + mspc) / 2
-    // shapleyHAT  = (ensemble − mspc + hat) / 2
-    const shapleyMSPC = (ensembleOutput - hatContrib + mspcContrib) / 2;
-    const shapleyHAT  = (ensembleOutput - mspcContrib + hatContrib) / 2;
-
-    return {
-      mspc: shapleyMSPC,
-      hat: shapleyHAT,
-      efficiency: shapleyMSPC + shapleyHAT,
-      timestamp: Date.now()
-    };
-  }
-
-  /**
-   * 7. FEATURE IMPORTANCE (SHAP-like analysis)
-   */
-
-  requestFeatureShap(features, baseline, modelOutput, baselineOutput) {
-    if (!this.shapWorker) {
-        console.error('SHAP worker unavailable—cannot compute feature importances.');
-        return null;
-    }
-    try {
-        this.shapWorker.postMessage({
-        type: 'calculateFeatureShap',
-        data: {
-            features,
-            baseline,
-            modelOutput,
-            baselineOutput
-        },
-        id: Date.now()
-        });
-    } catch (err) {
-        console.error('SHAP worker postMessage failed:', err);
-    }
-    return null;
-    }
 
   /**
    * UTILITY METHODS
