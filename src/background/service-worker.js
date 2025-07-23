@@ -78,13 +78,28 @@ let metricsCollector = null;
 let aucWorker = null;
 let metricsWorker = null;
 
-chrome.notifications.onButtonClicked.addListener((notificationId, buttonIndex) => {
+const FEEDBACK_LABELS = {
+  0: 'productive',       // green “Productive”
+  1: 'non-productive',   // gray  “Non-productive”
+  2: 'overuse'           // red   “Overuse”
+};
+
+chrome.notifications.onButtonClicked.addListener(async (notificationId, buttonIndex) => {
   // Feedback notifications start with 'feedback_'
   if (notificationId.startsWith('feedback_')) {
-    if (buttonIndex === 0) {
-      chrome.tabs.create({ url: chrome.runtime.getURL('popup.html?feedback=true') });
+    const classLabel = FEEDBACK_LABELS[buttonIndex];
+    if (classLabel) {
+        // Send the feedback into your SW message pipeline
+        chrome.runtime.sendMessage({
+        type: 'USER_FEEDBACK',
+        data: {
+            tabId: notificationId.split('_')[1],  // if you embedded tabId in the ID
+            classValue: classLabel,
+            confidence: 1.0
+            }
+        });
     }
-    clearNotificationAsync(notificationId);
+    await clearNotificationAsync(notificationId);
     return;
   }
 
@@ -93,7 +108,11 @@ chrome.notifications.onButtonClicked.addListener((notificationId, buttonIndex) =
     if (buttonIndex === 0) {
       chrome.tabs.create({ url: chrome.runtime.getURL('popup.html?overuse=true') });
     }
-    clearNotificationAsync(notificationId);
+    else if (buttonIndex === 1) {
+      await clearNotificationAsync(notificationId);
+      await showFeedbackNotification(notificationId.split('_')[1]);
+    }
+    await clearNotificationAsync(notificationId);
     return;
   }
 });
@@ -306,9 +325,13 @@ async function handleMessage(message, sender, sendResponse) {
         sendResponse(await getCurrentStats());
         break;
         
-      case 'GET_SESSION_STATS':
+      case 'GET_TAB_SESSION_STATS':
         sendResponse(await getSessionStats(message.tabId));
         break;
+
+      case 'GET_ALL_SESSION_STATS':
+        sendResponse(await getAllSessions());
+      break;
         
       case 'RESET_SYSTEM':
         await resetSystem();
@@ -517,18 +540,20 @@ async function handleUserFeedback(feedbackData) {
  */
 async function showFeedbackNotification() {
   try {
-    const notificationId = `feedback_${Date.now()}`;
+    const notificationId = `feedback_${tabId}_${Date.now()}`;
     
     await createNotificationAsync(notificationId, {
       type: 'basic',
       iconUrl: chrome.runtime.getURL('icons/icon48.png'),
-      title: 'Internet Usage Feedback',
-      message: 'Help improve our detection by providing feedback on your recent browsing behavior.',
+      title: 'Rate Your Recent Browsing',
+      message: 'How would you classify your recent browsing behavior?',
       buttons: [
-        { title: 'Provide Feedback' },
-        { title: 'Not Now' }
+        { title: 'Productive'      },  // index 0
+        { title: 'Non-productive'  },  // index 1
+        { title: 'Overuse'         }   // index 2
       ],
-      priority: 1
+      priority: 1,
+      data: { tabId }
     });
 
   } catch (error) {
@@ -550,6 +575,7 @@ async function showOveruseNotification(data) {
       message: `Our analysis suggests you might be experiencing internet overuse.`, /*Confidence: ${Math.round(data.confidence * 100)}%*/
       buttons: [
         { title: 'View Details' },
+        { title: 'Give Feedback' },
         { title: 'Dismiss' }
       ],
       priority: 2
@@ -569,7 +595,7 @@ async function scheduleOveruseNotification(votingResult) {
     const lastOveruseTime = await getLastOveruseNotificationTime();
     const now = Date.now();
     
-    if (now - lastOveruseTime < 3600000) { // 1 hour
+    if (now - lastOveruseTime < 2700000) { // 45 mins
       return;
     }
 
@@ -641,6 +667,33 @@ async function getSessionStats(tabId) {
     };
   } catch (error) {
     console.error('Error getting session stats:', error);
+    return { error: error.message };
+  }
+}
+
+async function getAllSessions() {
+  try {
+    const now = Date.now();
+    const all = [];
+
+    // Iterate over Map<tabId, session>
+    for (const [tabId, session] of featureEngineer.sessions.entries()) {
+      all.push({
+        tabId,
+        id: session.id,
+        domains: Array.from(session.domains),
+        startTime: session.startTime,
+        focusMs: session.focusMs,
+        lastVector: session.lastVec,
+        finalPatterns: session.finalPatterns,
+        closed: session.closed, //closed === false
+        closedAt: session.closedAt
+      });
+    }
+
+    return { sessions: all, timestamp: now };
+  } catch (error) {
+    console.error('Error getting all session stats:', error);
     return { error: error.message };
   }
 }

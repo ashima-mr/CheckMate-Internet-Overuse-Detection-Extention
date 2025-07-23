@@ -3,176 +3,166 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CheckMate - Internet Usage Monitor</title>
+    <title>CheckMate - Internet Overuse Detection</title>
     <link rel="stylesheet" href="popup.css">
-    <style>
-        html, body, .container {
-            min-width: 340px;
-            max-width: 420px;
-            min-height: 480px;
-            max-height: 650px;
-            width: 100vw;
-            height: 100vh;
-            box-sizing: border-box;
-        }
-        body, .container {
-            display: flex;
-            flex-direction: column;
-            flex: 1 1 auto;
-        }
-        .main-content { flex: 1 1 auto; display: flex; flex-direction: column; }
-    </style>
 </head>
 <body>
     <div class="container">
-        <!-- Header -->
-        <div class="header">
-            <div class="logo">
-                <div class="logo-icon">🔍</div>
-                <h1 class="title">CheckMate</h1>
-            </div>
-            <div class="status-indicators">
-                <div id="statusIndicator" class="status-indicator">
-                    <span class="status-dot active"></span>
-                    <span class="status-text">Active</span>
+        <!-- Header Section -->
+        <header class="header">
+            <div class="header-content">
+                <div class="logo">
+                    <div class="logo-icon">🔍</div>
+                    </div>
+                    <h1>CheckMate</h1>
+                </div>
+                <div class="tracking-status" id="trackingStatus">
+                    <div class="status-indicator" id="statusIndicator"></div>
+                    <span id="statusText">Loading...</span>
                 </div>
             </div>
+        </header>
+
+        <!-- Main Status Section -->
+        <section class="status-section">
+            <div class="prediction-card main-prediction">
+                <div class="prediction-header">
+                    <h2>Current Status</h2>
+                    <div class="confidence-badge" id="confidenceBadge">--</div>
+                </div>
+                <div class="prediction-value" id="mainPrediction">
+                    <span class="prediction-text">Loading...</span>
+                    <div class="prediction-icon" id="predictionIcon"></div>
+                </div>
+            </div>
+
+            <!-- Model Predictions Grid -->
+            <div class="predictions-grid">
+                <div class="prediction-card">
+                    <div class="card-header">
+                        <h3>MSPC Status</h3>
+                        <div class="info-icon" title="Multivariate Statistical Process Control">ℹ️</div>
+                    </div>
+                    <div class="prediction-value small" id="mspcPrediction">
+                        <span>--</span>
+                    </div>
+                </div>
+
+                <div class="prediction-card">
+                    <div class="card-header">
+                        <h3>HAT Classification</h3>
+                        <div class="info-icon" title="Hoeffding Adaptive Tree">ℹ️</div>
+                    </div>
+                    <div class="prediction-value small" id="hatPrediction">
+                        <span>--</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- System Metrics -->
+        <section class="metrics-section">
+            <h2>System Metrics</h2>
+            <div class="metrics-grid">
+                <div class="metric-item">
+                    <label>Last Concept Drift</label>
+                    <span id="lastDrift">Never</span>
+                </div>
+                <div class="metric-item">
+                    <label>ADWIN Window Size</label>
+                    <span id="adwinWindow">--</span>
+                </div>
+                <div class="metric-item">
+                    <label>Last Overuse Alert</label>
+                    <span id="lastOveruse">None</span>
+                </div>
+                <div class="metric-item">
+                    <label>Session Duration</label>
+                    <span id="sessionDuration">--</span>
+                </div>
+                <div class="metric-item">
+                    <label>Total Interactions</label>
+                    <span id="totalInteractions">--</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Control Buttons -->
+        <section class="controls-section">
+            <div class="primary-controls">
+                <button id="pauseResumeBtn" class="btn btn-primary">
+                    <span class="btn-icon" id="pauseResumeIcon">⏸️</span>
+                    <span id="pauseResumeText">Pause Tracking</span>
+                </button>
+                <button id="feedbackBtn" class="btn btn-secondary">
+                    <span class="btn-icon">💭</span>
+                    Give Feedback
+                </button>
+            </div>
+
+            <div class="action-buttons">
+                <button id="detailedStatsBtn" class="btn btn-outline">
+                    <span class="btn-icon">📊</span>
+                    View Detailed Stats
+                </button>
+            </div>
+        </section>
+
+        <!-- Data Management -->
+        <section class="data-section">
+            <h2>Data Management</h2>
+            <div class="data-controls">
+                <div class="download-section">
+                    <h3>Download Data</h3>
+                    <div class="download-buttons">
+                        <button id="downloadCurrentBtn" class="btn btn-small">
+                            <span class="btn-icon">💾</span>
+                            Current Stats
+                        </button>
+                        <button id="downloadSessionBtn" class="btn btn-small">
+                            <span class="btn-icon">📋</span>
+                            Session Data
+                        </button>
+                        <button id="downloadTabBtn" class="btn btn-small">
+                            <span class="btn-icon">🗂️</span>
+                            Tab Data
+                        </button>
+                        <button id="downloadMetricsBtn" class="btn btn-small">
+                            <span class="btn-icon">📈</span>
+                            Metrics
+                        </button>
+                    </div>
+                </div>
+
+                <div class="danger-section">
+                    <h3>System Reset</h3>
+                    <button id="resetSystemBtn" class="btn btn-warning">
+                        <span class="btn-icon">🔄</span>
+                        Reset System
+                    </button>
+                    <button id="deleteDataBtn" class="btn btn-danger">
+                        <span class="btn-icon">🗑️</span>
+                        Delete All Data
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Loading Overlay -->
+        <div class="loading-overlay" id="loadingOverlay">
+            <div class="loading-spinner"></div>
+            <p>Processing...</p>
         </div>
 
-        <!-- Main Content -->
-        <div class="main-content">
-            <!-- Current Session Status -->
-            <div class="status-section">
-                <h2>Current Session</h2>
-                <div class="session-stats">
-                    <div class="stat-item">
-                        <span class="stat-label">Duration</span>
-                        <span id="sessionDuration" class="stat-value">--</span>
-                    </div>
-                    <div class="stat-item">
-                        <span class="stat-label">Websites</span>
-                        <span id="websiteCount" class="stat-value">--</span>
-                    </div>
-                    <div class="stat-item">
-                        <span class="stat-label">Activity</span>
-                        <span id="activityLevel" class="stat-value">--</span>
-                    </div>
-                </div>
-                
-                <!-- Usage Health Indicator -->
-                <div class="usage-indicator">
-                    <span id="usageLabel" class="usage-label">Real-Time Usage Health Indicator</span>
-                    <div class="usage-bar">
-                        <div id="usageFill" class="usage-fill"></div>
-                    </div>
-                    <div class="usage-scale">
-                        <span>Healthy</span>
-                        <span>Moderate</span>
-                        <span>Concerning</span>
-                    </div>
-                </div>
+        <!-- Toast Notifications -->
+        <div class="toast" id="toast">
+            <div class="toast-content">
+                <span class="toast-icon" id="toastIcon"></span>
+                <span class="toast-message" id="toastMessage"></span>
             </div>
-
-            <!-- Session Feedback Section (always visible) -->
-            <section id="sessionFeedbackSection" class="feedback-section" style="display:block;">
-                <div id="feedbackPromptBanner" class="feedback-banner" style="display:none; background:#ffe066; color:#333; padding:8px; border-radius:6px; margin-bottom:8px; font-weight:bold;">
-                    Help improve CheckMate: Please classify your session to jump-start the AI!
-                </div>
-                <h2>Session Feedback</h2>
-                <div class="feedback-question">
-                    <p>How would you classify your current session?</p>
-                </div>
-                <div class="feedback-buttons">
-                    <button id="feedbackProductive" class="btn-feedback btn-productive">✅ Productive</button>
-                    <button id="feedbackNonproductive" class="btn-feedback btn-nonproductive">😐 Non-Productive</button>
-                    <button id="feedbackOveruse" class="btn-feedback btn-overuse">⚠️ Overuse</button>
-                </div>
-            </section>
-
-            <!-- Recent Predictions Section -->
-            <section id="recentPredictionsSection" class="recent-predictions-section">
-                <h2>Recent Predictions</h2>
-                <div id="recentPredictionsList" class="recent-predictions-list">
-                    <!-- Populated by popup.js -->
-                </div>
-            </section>
-
-            <!-- ML Insights Section -->
-            <section class="insights-section">
-                <h2>AI Analysis</h2>
-                <div class="insight-grid">
-                    <div class="insight-item">
-                        <span class="insight-label">Activity Pattern Alignment with Typical Overuse</span>
-                        <span class="insight-value" id="patternScore">--</span>
-                    </div>
-                    <div class="insight-item">
-                        <span class="insight-label">AI Assessment Confidence</span>
-                        <span class="insight-value" id="confidenceScore">--</span>
-                    </div>
-                </div>
-            </section>
-
-            <!-- Controls Section -->
-            <section class="controls-section">
-                <div class="setting-item">
-                    <span class="setting-label">Enable Extension</span>
-                    <label class="switch">
-                        <input type="checkbox" id="enableMonitoring" checked>
-                        <span class="slider"></span>
-                    </label>
-                </div>
-
-                <div class="setting-item">
-                    <span class="setting-label">Enable Notifications</span>
-                    <label class="switch">
-                        <input type="checkbox" id="enableNotifications" checked>
-                        <span class="slider"></span>
-                    </label>
-                </div>
-
-                <div class="sensitivity-control">
-                    <span class="setting-label">Detection Sensitivity</span>
-                    <input type="range" id="sensitivitySlider" class="sensitivity-slider" min="0.1" max="1.0" step="0.1" value="0.5">
-                    <div class="sensitivity-labels">
-                        <span>Low</span>
-                        <span>High</span>
-                    </div>
-                </div>
-            </section>
-
-            <!-- Error/Log Area -->
-            <div id="popupLogArea" style="display:none; color:#e53e3e; font-size:13px; margin:8px 0;"></div>
-
-            <!-- Actions Section -->
-            <section class="actions-section">
-                <div class="action-row">
-                    <button id="viewStatsBtn" class="btn btn-primary">📊 View Detailed Stats</button>
-                    <button id="manageWebsitesBtn" class="btn btn-secondary">🔗 Manage Website Lists</button>
-                </div>
-
-                <div class="action-row">
-                    <button id="pauseBtn" class="btn btn-secondary">⏸️ Pause</button>
-                    <button id="takeBreakBtn" class="btn btn-primary">☕ Take Break</button>
-                </div>
-
-                <div class="privacy-controls">
-                    <button id="downloadDataBtn" class="btn btn-secondary">💾 Download Data</button>
-                    <button id="exportMetricsBtn" class="btn btn-secondary">📤 Export Research Metrics</button>
-                    <button id="deleteDataBtn" class="btn btn-danger">🗑️ Delete All Data</button>
-                </div>
-            </section>
-
-            <!-- Footer -->
-            <footer class="footer">
-                <div class="last-update">
-                    Last update: <span id="lastUpdate">--</span>
-                </div>
-            </footer>
         </div>
     </div>
-    
-    <script src="lib/chart.umd.min.js"></script>    
-    <script type="module" src="feedback-manager.js"></script>
+
     <script src="popup.js"></script>
 </body>
 </html>
